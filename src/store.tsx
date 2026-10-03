@@ -1,0 +1,183 @@
+/* ================================================================
+ * On-device storage (IndexedDB). Nothing here leaves the phone.
+ *
+ *   sessions  one row per archive: name, dates, page order and the
+ *             sorted documents (without images, which live in pages)
+ *   pages     one row per captured page: scan, thumbnail, original
+ *             frame, detected outline, text read from it, PDF page
+ * ================================================================ */
+interface StoredDoc extends Omit<ArchiveDoc, 'images' | 'thumbs' | 'originals' | 'pdfs'> { pageKeys: string[] }
+interface SessionMeta {
+  id: string; name: string; createdAt: number; updatedAt: number;
+  pageKeys: string[];          // every captured page, in order
+  docs: StoredDoc[];           // sorted documents (pages not yet in a document are still to be processed)
+  cover: string[];             // up to 3 thumbnails for the archive list
+  processed?: string[];        // pages already sorted into documents (or set aside as duplicates)
+}
+interface StoredPage {
+  key: string; sessionId: string; image: string; thumb: string; original: string; originalRatio: number;
+  quad: [number, number][]; sig: number[]; capturedAt: number; sharpness: number; blurry: boolean;
+  ocr?: { lines: string[]; ok: boolean }; pdf?: PagePdf;
+}
+
+let dbPromise: Promise<IDBDatabase> | null = null;
+function openDb(): Promise<IDBDatabase> {
+  if (!dbPromise) {
+    dbPromise = new Promise((res, rej) => {
+      try {
+        const req = indexedDB.open('paper-archive', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('pages')) db.createObjectStore('pages', { keyPath: 'key' }).createIndex('session', 'sessionId');
+        };
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+      } catch (e) { rej(e); }
+    });
+    dbPromise.catch(() => { dbPromise = null; });
+  }
+  return dbPromise;
+}
+function idb<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest | void): Promise<T> {
+  return openDb().then((db) => new Promise<T>((res, rej) => {
+    const t = db.transaction(store, mode);
+    const s = t.objectStore(store);
+    const r = fn(s);
+    t.oncomplete = () => res(r ? (r as IDBRequest).result : (undefined as any));
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error);
+  }));
+}
+
+const store = {
+  available: typeof indexedDB !== 'undefined',
+  listSessions: () => idb<SessionMeta[]>('sessions', 'readonly', (s) => s.getAll()).then((l) => (l || []).sort((a, b) => b.updatedAt - a.updatedAt)),
+  getSession: (id: string) => idb<SessionMeta | undefined>('sessions', 'readonly', (s) => s.get(id)),
+  putSession: (m: SessionMeta) => idb<void>('sessions', 'readwrite', (s) => { s.put(m); }),
+  putPage: (p: StoredPage) => idb<void>('pages', 'readwrite', (s) => { s.put(p); }),
+  getPages: (sessionId: string) => idb<StoredPage[]>('pages', 'readonly', (s) => s.index('session').getAll(sessionId)),
+  deletePages: (keys: string[]) => idb<void>('pages', 'readwrite', (s) => { keys.forEach((k) => s.delete(k)); }),
+  async updatePage(key: string, patch: Partial<StoredPage>) {
+    const cur = await idb<StoredPage | undefined>('pages', 'readonly', (s) => s.get(key));
+    if (cur) await store.putPage({ ...cur, ...patch });
+  },
+  async deleteSession(id: string) {
+    const pages = await store.getPages(id).catch(() => [] as StoredPage[]);
+    await store.deletePages(pages.map((p) => p.key));
+    await idb<void>('sessions', 'readwrite', (s) => { s.delete(id); });
+  },
+  async deleteAll() {
+    await idb<void>('pages', 'readwrite', (s) => { s.clear(); });
+    await idb<void>('sessions', 'readwrite', (s) => { s.clear(); });
+  },
+};
+
+/** Ask the browser not to clear our data when space runs low (granted silently on most phones). */
+function askPersistentStorage() {
+  try { (navigator as any).storage?.persist?.(); } catch { /* not supported */ }
+}
+
+const toStoredDoc = (d: ArchiveDoc): StoredDoc => {
+  const { images, thumbs, originals, pdfs, looks, aspects, pageTexts, ...rest } = d as any;
+  return { ...rest, pageKeys: d.pageKeys || [] };
+};
+function hydrateDoc(d: StoredDoc, pages: Map<string, StoredPage>): ArchiveDoc {
+  const ps = d.pageKeys.map((k) => pages.get(k)).filter(Boolean) as StoredPage[];
+  if (!ps.length) return d as ArchiveDoc;
+  return {
+    ...d, images: ps.map((p) => p.image), thumbs: ps.map((p) => p.thumb),
+    originals: ps.map((p) => ({ src: p.original, quad: p.quad, ratio: p.originalRatio })),
+    looks: ps.map((p: any) => p.look), aspects: ps.map((p: any) => p.aspect), pageTexts: ps.map((p) => (p.ocr && p.ocr.lines) || []),
+    pdfs: ps.map((p) => p.pdf || null),
+  } as ArchiveDoc;
+}
+/** Put stored text results back into the reading queue so nothing is read twice. */
+function primeReadCache(pages: StoredPage[]) {
+  pages.forEach((p) => {
+    if (p.ocr && p.ocr.ok) ocrJobs.set(p.key, Promise.resolve(p.ocr));
+    if (p.pdf) pagePdf.set(p.key, p.pdf);
+  });
+}
+const toRealPage = (p: StoredPage): RealPage => {
+  const { sessionId, ocr, pdf, ...rest } = p as any;
+  return rest as RealPage;
+};
+const defaultSessionName = (t = Date.now()) => {
+  const d = new Date(t);
+  return `Archive · ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${clock(t)}`;
+};
+const fmtBytes = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : b < 1024 ** 3 ? `${Math.round(b / 1024 / 1024)} MB` : `${(b / 1024 ** 3).toFixed(1)} GB`);
+
+/* ---------- Archive list on the home screen ---------- */
+function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDelete, onRename, onNew, usage }: any) {
+  const [confirmId, setConfirmId] = useState('');
+  const [editId, setEditId] = useState('');
+  const [editName, setEditName] = useState('');
+  if (!sessions.length) return null;
+  return (
+    <section className="sessions" aria-label="Your archives">
+      <div className="sessions-head">
+        <div>
+          <h2 className="h-section">Your archives</h2>
+          <span className="fine"><Icon name="lock" size={13} /> Saved on this device{usage ? ` · ${usage}` : ''}</span>
+        </div>
+        <button className="btn btn-quiet btn-sm" type="button" onClick={onNew}><Icon name="plus" size={15} /> New archive</button>
+      </div>
+      <div className="session-list">
+        {sessions.map((s: SessionMeta) => {
+          const done = new Set((s as any).processed || s.docs.flatMap((d) => d.pageKeys));
+          const pending = s.pageKeys.filter((k) => !done.has(k)).length;
+          const review = s.docs.filter((d) => d.review).length;
+          return (
+            <article className="session" key={s.id}>
+              <div className="session-cover" aria-hidden="true">
+                {s.cover.length ? s.cover.slice(0, 3).map((c, i) => <img key={i} src={c} alt="" style={{ transform: `rotate(${[-6, 3, -1][i]}deg)` }} />) : <span className="cover-empty"><Icon name="doc" size={20} /></span>}
+              </div>
+              <div className="session-main">
+                {editId === s.id ? (
+                  <form className="rename" onSubmit={(e: any) => { e.preventDefault(); onRename(s.id, editName.trim() || s.name); setEditId(''); }}>
+                    <input id={`rename-${s.id}`} value={editName} onChange={(e: any) => setEditName(e.target.value)} autoFocus dir="auto" aria-label="Archive name" />
+                    <button className="btn btn-quiet btn-sm" type="submit">Save</button>
+                  </form>
+                ) : (
+                  <button className="session-name" type="button" onClick={() => { setEditId(s.id); setEditName(s.name); }} title="Rename">
+                    <span dir="auto">{s.name}</span><Icon name="pencil" size={13} />
+                  </button>
+                )}
+                <span className="session-meta num">
+                  {s.docs.length ? `${plural(s.docs.length, 'document')} · ` : ''}{plural(s.pageKeys.length, 'page')}
+                  {review ? ` · ${review} to review` : ''}
+                </span>
+                {pending > 0 && <span className="pill-warn session-pill">{plural(pending, 'page')} not sorted yet</span>}
+                <span className="session-date">Last changed {new Date(s.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, {clock(s.updatedAt)}</span>
+              </div>
+              {confirmId === s.id ? (
+                <div className="session-actions confirm-row">
+                  <span>Delete this archive and its {plural(s.pageKeys.length, 'page')}?</span>
+                  <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmId('')}>Cancel</button>
+                  <button className="btn btn-danger btn-sm" type="button" onClick={() => { setConfirmId(''); onDelete(s.id); }}>Delete</button>
+                </div>
+              ) : (
+                <div className="session-actions">
+                  {pending > 0 ? (
+                    <>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => onContinue(s.id)}><Icon name="camera" size={15} /> Continue capturing</button>
+                      <button className="btn btn-quiet btn-sm" type="button" onClick={() => onFinish(s.id)}>Finish and sort</button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => onOpen(s.id)}>Open</button>
+                      <button className="btn btn-quiet btn-sm" type="button" onClick={() => onAddMore(s.id)}><Icon name="camera" size={15} /> Add pages</button>
+                    </>
+                  )}
+                  <button className="icon-btn" type="button" aria-label={`Delete ${s.name}`} onClick={() => setConfirmId(s.id)}><Icon name="trash" size={16} /></button>
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
