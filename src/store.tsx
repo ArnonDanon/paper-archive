@@ -123,6 +123,9 @@ async function loadArchiveDocs(id: string): Promise<{ meta: SessionMeta | undefi
 /* ---------- Archive list on the home screen ---------- */
 function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDelete, onRename, onNew, onExport, usage }: any) {
   const [confirmId, setConfirmId] = useState('');
+  const notExported = sessions.reduce((n: number, s: SessionMeta) => n + s.docs.filter((d: any) => !d.exportedAt).length, 0);
+  const [snoozed, setSnoozed] = useState(() => { try { return Number(localStorage.getItem('pa.backupSnooze') || 0) > Date.now(); } catch { return false; } });
+  const snooze = () => { try { localStorage.setItem('pa.backupSnooze', String(Date.now() + 3 * 24 * 3600 * 1000)); } catch { /* ignore */ } setSnoozed(true); };
   const [editId, setEditId] = useState('');
   const [editName, setEditName] = useState('');
   if (!sessions.length) return null;
@@ -138,6 +141,16 @@ function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDele
           <button className="btn btn-quiet btn-sm" type="button" onClick={onNew}><Icon name="plus" size={15} /> New archive</button>
         </div>
       </div>
+      {notExported > 0 && !snoozed && (
+        <div className="backup-note" role="status">
+          <Icon name="alert" size={16} />
+          <span><strong>{plural(notExported, 'document')} {notExported === 1 ? 'isn’t' : 'aren’t'} exported yet.</strong> They live only in this browser. Export to keep your own copy.</span>
+          <div className="backup-actions">
+            <button className="btn btn-primary btn-sm" type="button" onClick={onExport}>Export</button>
+            <button className="btn btn-quiet btn-sm" type="button" onClick={snooze}>Later</button>
+          </div>
+        </div>
+      )}
       <div className="session-list">
         {sessions.map((s: SessionMeta) => {
           const done = new Set((s as any).processed || s.docs.flatMap((d) => d.pageKeys));

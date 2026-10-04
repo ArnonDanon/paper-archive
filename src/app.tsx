@@ -562,7 +562,7 @@ function AppHeader({ onHome, openPrivacy, right }: { onHome: () => void; openPri
   );
 }
 
-function HomeScreen({ onStart, onHow, onSample, openPrivacy, sessionList, hasSessions }: any) {
+function HomeScreen({ onStart, onHow, onSample, openPrivacy, sessionList, hasSessions, onAbout }: any) {
   const demoQueue = useMemo(() => [QUEUE[0], QUEUE[3], QUEUE[5], QUEUE[8]], []);
   const s = useDeskSession({ queue: demoQueue, running: true, speed: 1.15, loop: true });
   const done = s.phase === 'removing' ? s.idx + 1 : s.idx;
@@ -593,7 +593,7 @@ function HomeScreen({ onStart, onHow, onSample, openPrivacy, sessionList, hasSes
           <figcaption>Nobody presses a button here. A page goes down, the outline locks on, and it is captured.</figcaption>
         </figure>
       </main>
-      <footer className="foot">Prototype with sample documents · <button className="foot-link" onClick={onSample} type="button">Open a sample archive</button></footer>
+      <footer className="foot">Prototype with sample documents · <button className="foot-link" onClick={onSample} type="button">Open a sample archive</button> · <button className="foot-link" onClick={onAbout} type="button">About &amp; terms</button></footer>
     </div>
   );
 }
@@ -1708,7 +1708,50 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
   );
 }
 
-function PrivacySheet({ onClose, onDelete, hasArchive }: any) {
+/* ---------- About & terms ---------- */
+const TERMS_VERSION = 1;
+const termsAccepted = () => { try { return Number(localStorage.getItem('pa.terms') || 0) >= TERMS_VERSION; } catch { return false; } };
+const acceptTerms = () => { try { localStorage.setItem('pa.terms', String(TERMS_VERSION)); } catch { /* storage unavailable */ } };
+function AboutSheet({ onClose, onAccept }: any) {
+  const [lang, setLang] = useState('en');
+  return (
+    <div className="sheet-wrap" onClick={onAccept ? undefined : onClose}>
+      <div className="sheet about-sheet" role="dialog" aria-label="About and terms" onClick={(e: any) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <span className="privacy-icon"><Icon name="doc" size={20} /></span>
+          <h2>{lang === 'en' ? 'About Paper Archive' : 'אודות ארכיון נייר'}</h2>
+          <div className="lang-switch" role="group" aria-label="Language">
+            <button type="button" className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
+            <button type="button" className={lang === 'he' ? 'on' : ''} onClick={() => setLang('he')}>עב</button>
+          </div>
+          {!onAccept && <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button>}
+        </div>
+        {lang === 'en' ? (
+          <div className="terms" dir="ltr">
+            <section><h3>Your documents stay on this device</h3><p>Scanning, reading text and sorting all happen in this browser. There is no account and no server. The developer never receives, sees or stores your documents.</p></section>
+            <section><h3>Detected details can be wrong</h3><p>Sender, dates, amounts, categories and duplicates are automatic guesses. Always check the original page before relying on any detail. The app does not give legal, tax or financial advice, and does not tell you whether a document is correct or what you need to do.</p></section>
+            <section><h3>Keep your own copies</h3><p>Archives are stored only in this browser on this phone. Clearing browser data, using a private window, removing the browser or changing phones deletes them. Export regularly and keep the files somewhere you trust. You are responsible for your backups and for where you store exported files. Keep original paper documents wherever you are required to.</p></section>
+            <section><h3>Provided as is</h3><p>Paper Archive is provided “as is”, without warranty of any kind. To the extent permitted by law, the developer is not liable for any loss of data or any damage arising from using it.</p></section>
+          </div>
+        ) : (
+          <div className="terms" dir="rtl" lang="he">
+            <section><h3>המסמכים שלך נשארים במכשיר</h3><p>הסריקה, קריאת הטקסט והמיון מתבצעים כולם בדפדפן הזה. אין חשבון משתמש ואין שרת. המפתח אינו מקבל, אינו רואה ואינו שומר את המסמכים שלך.</p></section>
+            <section><h3>הפרטים שזוהו עלולים להיות שגויים</h3><p>שולח, תאריכים, סכומים, קטגוריות וכפילויות מזוהים אוטומטית ועלולים לטעות. יש לבדוק תמיד את הדף המקורי לפני שמסתמכים על פרט כלשהו. האפליקציה אינה נותנת ייעוץ משפטי, מס או פיננסי, ואינה קובעת אם מסמך תקין או מה עליך לעשות.</p></section>
+            <section><h3>שמרו עותקים משלכם</h3><p>הארכיונים נשמרים רק בדפדפן הזה בטלפון הזה. ניקוי נתוני הדפדפן, גלישה פרטית, הסרת הדפדפן או החלפת טלפון ימחקו אותם. יש לייצא באופן קבוע ולשמור את הקבצים במקום שאתם סומכים עליו. האחריות לגיבוי ולמקום שמירת הקבצים המיוצאים היא שלכם. יש לשמור את מסמכי הנייר המקוריים בכל מקום שבו הדבר נדרש.</p></section>
+            <section><h3>השימוש כמות שהוא</h3><p>ארכיון נייר מסופק „כמות שהוא” (AS IS), ללא אחריות מכל סוג. במידה המרבית המותרת על פי דין, המפתח אינו אחראי לאובדן מידע או לכל נזק הנובע מהשימוש בו.</p></section>
+          </div>
+        )}
+        {onAccept && (
+          <div className="cta-row end">
+            <button className="btn btn-primary" type="button" onClick={onAccept}>{lang === 'en' ? 'I understand' : 'הבנתי'}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PrivacySheet({ onClose, onDelete, hasArchive, onAbout }: any) {
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="sheet-wrap" onClick={onClose}>
@@ -1725,6 +1768,7 @@ function PrivacySheet({ onClose, onDelete, hasArchive }: any) {
           <li><Icon name="check" size={16} /> Exports are built on the device, even offline.</li>
           <li><Icon name="check" size={16} /> The text reader is downloaded once from a public library server. Your pages are never sent anywhere.</li>
         </ul>
+        <button className="link-btn" type="button" onClick={onAbout}>About &amp; terms</button>
         {hasArchive && (!confirm ? (
           <button className="btn btn-quiet danger" onClick={() => setConfirm(true)} type="button"><Icon name="trash" size={16} /> Delete all archives from this device</button>
         ) : (
@@ -1824,6 +1868,7 @@ function App() {
   const [pageTarget, setPageTarget] = useState(null as null | { docId: string; mode: 'retake' | 'add'; index: number; title: string });
   const [reopenId, setReopenId] = useState(null as string | null);
   const [libExport, setLibExport] = useState(false);
+  const [about, setAbout] = useState(null as null | { then?: () => void });
   const [sessions, setSessions] = useState([] as SessionMeta[]);
   const [current, setCurrentState] = useState(null as SessionMeta | null);
   const [usage, setUsage] = useState('');
@@ -2005,7 +2050,9 @@ function App() {
     return false;
   }
 
-  function startNewArchive() { setCurrent(null); setDocs([]); setDocsOwner(null); setCameraInitial([]); go('setup'); }
+  // Show the terms once, before the first scan
+  const withTerms = (fn: () => void) => { if (termsAccepted()) fn(); else setAbout({ then: fn }); };
+  function startNewArchive() { withTerms(() => { setCurrent(null); setDocs([]); setDocsOwner(null); setCameraInitial([]); go('setup'); }); }
   async function continueSession(id: string) {
     const r = await loadSession(id); if (!r) return;
     setCameraInitial(r.pending);
@@ -2096,7 +2143,7 @@ function App() {
 
   return (
     <CatsCtx.Provider value={catsValue}>
-      {screen === 'home' && <HomeScreen onStart={startNewArchive} onHow={() => go('how')} openPrivacy={openPrivacy}
+      {screen === 'home' && <HomeScreen onStart={startNewArchive} onAbout={() => setAbout({})} onHow={() => go('how')} openPrivacy={openPrivacy}
         onSample={openSample} sessionList={sessionList} hasSessions={sessions.length > 0} />}
       {screen === 'how' && <HowScreen onBack={() => go('home')} onStart={startNewArchive} openPrivacy={openPrivacy} onSample={openSample} />}
       {screen === 'setup' && <SetupScreen onBack={() => go('home')} onStartCamera={(src: string) => startCamera(src)} openPrivacy={openPrivacy} />}
@@ -2134,7 +2181,8 @@ function App() {
         onAllArchives={() => { setReopenId(null); go('home'); refreshSessions(); }}
         onNewSession={() => { setCameraInitial([]); go('setup'); }} />}
 
-      {privacy && <PrivacySheet onClose={() => setPrivacy(false)} hasArchive={docs.length > 0 || sessions.length > 0}
+      {about && <AboutSheet onClose={() => setAbout(null)} onAccept={about.then ? () => { acceptTerms(); const f = about.then!; setAbout(null); f(); } : undefined} />}
+      {privacy && <PrivacySheet onAbout={() => { setPrivacy(false); setAbout({}); }} onClose={() => setPrivacy(false)} hasArchive={docs.length > 0 || sessions.length > 0}
         onDelete={async () => { try { await store.deleteAll(); } catch { /* ignore */ } setCurrent(null); setDocs([]); setDocsOwner(null); setCaptured([]); setPrivacy(false); go('home'); refreshSessions(); toast('All archives deleted from this device'); }} />}
       {libExport && <LibraryExportSheet sessions={sessions} toast={toast} onClose={() => setLibExport(false)} onExported={markExported} />}
       {addCat && <AddCategorySheet custom={custom} assignTo={addCat.assignTo} onClose={() => setAddCat(null)} onSave={saveCategory} onRemove={removeCategory} />}

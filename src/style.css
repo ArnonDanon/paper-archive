@@ -551,3 +551,16 @@ mark{background:color-mix(in srgb, var(--warn) 28%, transparent); color:inherit;
 .lib-opts label{display:flex; gap:8px; align-items:flex-start}
 .lib-opts small{color:var(--muted)}
 .lib-sheet .ready{color:var(--local); display:flex; gap:6px; align-items:center; font-size:13.5px}
+
+.about-sheet{max-width:560px; width:min(560px,100%)}
+.terms{display:grid; gap:12px; font-size:14px; line-height:1.55}
+.terms h3{font-size:14.5px; font-weight:600; margin-bottom:2px}
+.terms p{color:var(--muted)}
+.terms[dir="rtl"]{font-family:var(--f-he); text-align:right}
+.lang-switch{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.lang-switch button{background:none; border:0; padding:4px 9px; font-size:12.5px; color:var(--muted)}
+.lang-switch button.on{background:var(--ink); color:var(--bg)}
+.backup-note{display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; padding:12px 14px; border-radius:var(--r); background:var(--warn-soft); color:var(--ink); font-size:14px}
+.backup-note > svg{color:var(--warn); flex:none}
+.backup-note > span{flex:1; min-width:200px}
+.backup-actions{display:flex; gap:6px}
