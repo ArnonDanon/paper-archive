@@ -200,7 +200,6 @@ const QUEUE: ArchiveDoc[] = [
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const parseDate = (d: string) => { if (!d) return 0; const [dd, mm, yy] = d.split('.').map(Number); return new Date(yy, mm - 1, dd).getTime() || 0; };
 const clock = (t: number) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const isUnknown = (d: ArchiveDoc) => d.kind === 'handwritten' || d.sender === 'Unknown';
 
 function extractedText(doc: ArchiveDoc): string[] {
@@ -390,6 +389,7 @@ const ICONS: Record<string, string> = {
   restart: 'M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5',
   plus: 'M12 5v14M5 12h14',
   bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
+  globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z',
   tag: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
   pencil: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
@@ -412,6 +412,7 @@ function BrandMark() {
 }
 
 function LocalPill({ onClick, label = 'On this device', dark = false }: { onClick?: () => void; label?: string; dark?: boolean }) {
+  label = t(label);
   return (
     <button className={`local-pill ${dark ? 'is-dark' : ''}`} onClick={onClick} type="button">
       <Icon name="lock" size={14} /> {label}
@@ -433,7 +434,7 @@ function Bars({ n, seed = 1 }: { n: number; seed?: number }) {
 function DocPaper({ doc, page = 0 }: { doc: ArchiveDoc; page?: number }) {
   const seed = Number(doc.id.slice(1)) || 3;
   if (doc.images) {
-    return <div className="paper photo"><img src={doc.images[Math.min(page, doc.images.length - 1)]} alt={`Page ${page + 1}`} /></div>;
+    return <div className="paper photo"><img src={doc.images[Math.min(page, doc.images.length - 1)]} alt={t("Page {0}", { 0: page + 1 })} /></div>;
   }
   return (
     <div className={`paper kind-${doc.kind}`} dir="rtl" lang="he">
@@ -529,7 +530,7 @@ function DeskScene(props: {
 
       {guide && (
         <div className="frame-guide">
-          <span className="guide-label"><Icon name="check" size={14} /> Table in view</span>
+          <span className="guide-label"><Icon name="check" size={14} /> {t("Table in view")}</span>
         </div>
       )}
 
@@ -542,7 +543,7 @@ function DeskScene(props: {
             </svg>
           )}
           {phase === 'captured' && <Icon name="check" size={14} />}
-          <span>{STATUS[phase]}{phase === 'captured' && doc && doc.pages > 1 ? ` · page ${page + 1} of ${doc.pages}` : ''}</span>
+          <span>{t(STATUS[phase])}{phase === 'captured' && doc && doc.pages > 1 ? t(" · page {0} of {1}", { 0: page + 1, 1: doc.pages }) : ''}</span>
         </div>
       )}
       <div className="vignette" aria-hidden="true" />
@@ -553,11 +554,15 @@ function DeskScene(props: {
 /* ================================================================
  * Screens
  * ================================================================ */
+function HeaderLang() {
+  const { lang, setLang } = React.useContext(LangCtx);
+  return <LangMenu lang={lang} onChange={setLang} />;
+}
 function AppHeader({ onHome, openPrivacy, right }: { onHome: () => void; openPrivacy: () => void; right?: any }) {
   return (
     <header className="app-header">
-      <button className="brand" onClick={onHome} type="button"><BrandMark /><span>Paper Archive</span></button>
-      <div className="header-right">{right}<LocalPill onClick={openPrivacy} /></div>
+      <button className="brand" onClick={onHome} type="button"><BrandMark /><span>{t("Paper Archive")}</span></button>
+      <div className="header-right">{right}<HeaderLang /><LocalPill onClick={openPrivacy} /></div>
     </header>
   );
 }
@@ -572,28 +577,28 @@ function HomeScreen({ onStart, onHow, onSample, openPrivacy, sessionList, hasSes
       {sessionList}
       <main className={`home ${hasSessions ? 'is-returning' : ''}`}>
         <section className="home-copy">
-          <h1>Turn a pile of paper into a searchable archive.</h1>
-          <p className="lede">Prop your phone above the table and go through your papers one by one. Each page is captured on its own the moment it lies still. No photos to take, nothing to crop or rename.</p>
+          <h1>{t("Turn a pile of paper into a searchable archive.")}</h1>
+          <p className="lede">{t("Prop your phone above the table and go through your papers one by one. Each page is captured on its own the moment it lies still. No photos to take, nothing to crop or rename.")}</p>
           <div className="privacy-callout">
             <span className="privacy-icon"><Icon name="device" size={20} /></span>
             <div>
-              <strong>Processed locally on your device.</strong>
-              <span>Your documents stay on this device. No account, no upload.</span>
+              <strong>{t("Processed locally on your device.")}</strong>
+              <span>{t("Your documents stay on this device. No account, no upload.")}</span>
             </div>
           </div>
           <div className="cta-row">
-            <button className="btn btn-primary btn-lg" onClick={onStart} type="button">{hasSessions ? 'Start a new archive' : 'Start archiving'}</button>
-            <button className="btn btn-quiet btn-lg" onClick={onHow} type="button">See how it works</button>
+            <button className="btn btn-primary btn-lg" onClick={onStart} type="button">{hasSessions ? t("Start a new archive") : t("Start archiving")}</button>
+            <button className="btn btn-quiet btn-lg" onClick={onHow} type="button">{t("See how it works")}</button>
           </div>
         </section>
         <figure className="home-demo">
           <div className="demo-frame">
             <DeskScene phase={s.phase} doc={s.doc} page={s.page} pileCount={4 - (done % 4)} doneCount={done % 4 + 1} speed={1.15} compact />
           </div>
-          <figcaption>Nobody presses a button here. A page goes down, the outline locks on, and it is captured.</figcaption>
+          <figcaption>{t("Nobody presses a button here. A page goes down, the outline locks on, and it is captured.")}</figcaption>
         </figure>
       </main>
-      <footer className="foot">Prototype with sample documents · <button className="foot-link" onClick={onSample} type="button">Open a sample archive</button> · <button className="foot-link" onClick={onAbout} type="button">About &amp; terms</button></footer>
+      <footer className="foot">{t("Prototype with sample documents ·")} <button className="foot-link" onClick={onSample} type="button">{t("Open a sample archive")}</button> · <button className="foot-link" onClick={onAbout} type="button">{t("About & terms")}</button></footer>
     </div>
   );
 }
@@ -611,27 +616,27 @@ function HowScreen({ onBack, onStart, onSample, openPrivacy }: any) {
     <div className="page">
       <AppHeader onHome={onBack} openPrivacy={openPrivacy} />
       <main className="narrow">
-        <button className="link-back" onClick={onBack} type="button"><Icon name="back" size={16} /> Back</button>
-        <h1 className="h-page">How it works</h1>
+        <button className="link-back" onClick={onBack} type="button"><Icon name="back" size={16} /> {t("Back")}</button>
+        <h1 className="h-page">{t("How it works")}</h1>
         <div className="compare">
           <div className="compare-col is-old">
-            <h2>Usual scanner apps</h2>
-            <p className="flow">Tap → photograph → crop → rename → file it</p>
-            <p className="muted">…then repeat for every page in the pile.</p>
+            <h2>{t("Usual scanner apps")}</h2>
+            <p className="flow">{t("Tap → photograph → crop → rename → file it")}</p>
+            <p className="muted">{t("…then repeat for every page in the pile.")}</p>
           </div>
           <div className="compare-col is-new">
-            <h2>Paper Archive</h2>
-            <p className="flow">Pick up a paper, open it, put it down. Next.</p>
-            <p className="muted">The app captures, separates and sorts while you keep going.</p>
+            <h2>{t("Paper Archive")}</h2>
+            <p className="flow">{t("Pick up a paper, open it, put it down. Next.")}</p>
+            <p className="muted">{t("The app captures, separates and sorts while you keep going.")}</p>
           </div>
         </div>
-        <h2 className="h-section">What happens on your device</h2>
+        <h2 className="h-section">{t("What happens on your device")}</h2>
         <ol className="steps">
-          {steps.map(([t, d]) => <li key={t}><strong>{t}</strong><span>{d}</span></li>)}
+          {steps.map(([a, d]) => <li key={a}><strong>{t(a)}</strong><span>{t(d)}</span></li>)}
         </ol>
         <div className="cta-row">
-          <button className="btn btn-primary btn-lg" onClick={onStart} type="button">Start archiving</button>
-          <button className="btn btn-quiet btn-lg" onClick={onSample} type="button">Open a sample archive</button>
+          <button className="btn btn-primary btn-lg" onClick={onStart} type="button">{t("Start archiving")}</button>
+          <button className="btn btn-quiet btn-lg" onClick={onSample} type="button">{t("Open a sample archive")}</button>
         </div>
       </main>
     </div>
@@ -645,32 +650,32 @@ function SetupScreen({ onBack, onStartCamera, openPrivacy }: any) {
       <AppHeader onHome={onBack} openPrivacy={openPrivacy} />
       <main className="setup">
         <section className="setup-copy">
-          <button className="link-back" onClick={onBack} type="button"><Icon name="back" size={16} /> Back</button>
-          <h1 className="h-page">Place your phone above the table</h1>
+          <button className="link-back" onClick={onBack} type="button"><Icon name="back" size={16} /> {t("Back")}</button>
+          <h1 className="h-page">{t("Place your phone above the table")}</h1>
           <ol className="setup-steps">
-            <li>Put your phone somewhere with a clear view of the table.</li>
-            <li>Open and place each document on the table.</li>
-            <li>Keep moving — the app captures documents automatically.</li>
+            <li>{t("Put your phone somewhere with a clear view of the table.")}</li>
+            <li>{t("Open and place each document on the table.")}</li>
+            <li>{t("Keep moving — the app captures documents automatically.")}</li>
           </ol>
           <fieldset className="source">
-            <legend>Camera</legend>
+            <legend>{t("Camera")}</legend>
             <label className={source === 'sim' ? 'on' : ''}>
               <input type="radio" name="src" id="src-sim" checked={source === 'sim'} onChange={() => setSource('sim')} />
-              <span><strong>Simulated desk</strong><small>Sample pile, for trying the flow</small></span>
+              <span><strong>{t("Simulated desk")}</strong><small>{t("Sample pile, for trying the flow")}</small></span>
             </label>
             <label className={source === 'cam' ? 'on' : ''}>
               <input type="radio" name="src" id="src-cam" checked={source === 'cam'} onChange={() => setSource('cam')} />
-              <span><strong>This device’s camera</strong><small>Falls back to the simulated desk if unavailable</small></span>
+              <span><strong>{t("This device’s camera")}</strong><small>{t("Falls back to the simulated desk if unavailable")}</small></span>
             </label>
           </fieldset>
-          <button className="btn btn-primary btn-lg" onClick={() => onStartCamera(source)} type="button"><Icon name="camera" /> Start camera</button>
-          <p className="fine"><Icon name="lock" size={13} /> Camera frames are analyzed in this browser and never leave the device.</p>
+          <button className="btn btn-primary btn-lg" onClick={() => onStartCamera(source)} type="button"><Icon name="camera" /> {t("Start camera")}</button>
+          <p className="fine"><Icon name="lock" size={13} /> {t("Camera frames are analyzed in this browser and never leave the device.")}</p>
         </section>
         <figure className="setup-preview">
           <div className="demo-frame">
             <DeskScene phase="clear" doc={null} page={0} pileCount={5} doneCount={0} guide />
           </div>
-          <figcaption>Keep the whole table in view. Leave room for the pile on one side.</figcaption>
+          <figcaption>{t("Keep the whole table in view. Leave room for the pile on one side.")}</figcaption>
         </figure>
       </main>
     </div>
@@ -710,9 +715,9 @@ function CameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy }: any)
     <div className="cam">
       <header className="cam-top">
         <div className="cam-left">
-          <button className="btn btn-cam btn-sm" onClick={() => { setRunning(false); setConfirm(true); }} type="button"><Icon name="restart" size={15} /> Start over</button>
+          <button className="btn btn-cam btn-sm" onClick={() => { setRunning(false); setConfirm(true); }} type="button"><Icon name="restart" size={15} /> {t("Start over")}</button>
         </div>
-        <div className="cam-title"><span className={`rec ${running ? '' : 'off'}`} /> {running ? 'Archiving' : 'Paused'} <span className="cam-time">{mm}:{ss}</span></div>
+        <div className="cam-title"><span className={`rec ${running ? '' : 'off'}`} /> {running ? t("Archiving") : t("Paused")} <span className="cam-time">{mm}:{ss}</span></div>
         <LocalPill onClick={openPrivacy} label="Local processing" dark />
       </header>
 
@@ -720,30 +725,30 @@ function CameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy }: any)
         <div className="cam-frame">
           <DeskScene phase={s.phase} doc={s.doc} page={s.page} pileCount={Math.max(0, pileLeft)} doneCount={doneDocs}
             speed={speed} stream={stream} paused={!running} />
-          {stream && <div className="sim-note">Live camera. Detection is simulated in this prototype.</div>}
+          {stream && <div className="sim-note">{t("Live camera. Detection is simulated in this prototype.")}</div>}
           {!running && !confirm && (
             <div className="paused">
-              <strong>Paused</strong>
-              <span>Captured pages are kept on this device.</span>
-              <button className="btn btn-light" onClick={() => setRunning(true)} type="button"><Icon name="play" size={16} /> Resume</button>
+              <strong>{t("Paused")}</strong>
+              <span>{t("Captured pages are kept on this device.")}</span>
+              <button className="btn btn-light" onClick={() => setRunning(true)} type="button"><Icon name="play" size={16} /> {t("Resume")}</button>
             </div>
           )}
           {confirm && (
             <div className="paused">
-              <strong>Start over?</strong>
-              <span>{pages.length ? `The ${plural(pages.length, 'page')} captured so far will be discarded.` : 'The session restarts from the first document.'}</span>
+              <strong>{t("Start over?")}</strong>
+              <span>{pages.length ? t("The {0} captured so far will be discarded.", { 0: plural(pages.length, 'page') }) : t("The session restarts from the first document.")}</span>
               <div className="cta-row center">
-                <button className="btn btn-cam" onClick={() => { setConfirm(false); setRunning(true); }} type="button">Keep going</button>
-                <button className="btn btn-light" onClick={onRestart} type="button"><Icon name="restart" size={16} /> Start over</button>
+                <button className="btn btn-cam" onClick={() => { setConfirm(false); setRunning(true); }} type="button">{t("Keep going")}</button>
+                <button className="btn btn-light" onClick={onRestart} type="button"><Icon name="restart" size={16} /> {t("Start over")}</button>
               </div>
-              <button className="link-cam" onClick={onExit} type="button">Leave and go back to the start screen</button>
+              <button className="link-cam" onClick={onExit} type="button">{t("Leave and go back to the start screen")}</button>
             </div>
           )}
           {s.phase === 'done' && running && (
             <div className="paused">
-              <strong>That was the whole pile</strong>
+              <strong>{t("That was the whole pile")}</strong>
               <span>{plural(docCount, 'document')} · {plural(pages.length, 'page')}</span>
-              <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">Finish archive</button>
+              <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">{t("Finish archive")}</button>
             </div>
           )}
         </div>
@@ -754,13 +759,13 @@ function CameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy }: any)
           <div className="counts">
             <span className="big">{plural(docCount, 'document')}</span><span className="dot">·</span><span className="big">{plural(pages.length, 'page')}</span>
           </div>
-          <ol className="capture-steps" aria-label="Current page">
-            {steps.map((st, i) => <li key={st} className={i < active ? 'past' : i === active ? 'now' : ''}>{st}</li>)}
+          <ol className="capture-steps" aria-label={t("Current page")}>
+            {steps.map((st, i) => <li key={st} className={i < active ? 'past' : i === active ? 'now' : ''}>{t(st)}</li>)}
           </ol>
         </div>
 
-        <div className="strip" ref={stripRef} aria-label="Captured pages">
-          {pages.length === 0 && <span className="strip-empty">No buttons to press. Lay a document down and let go.</span>}
+        <div className="strip" ref={stripRef} aria-label={t("Captured pages")}>
+          {pages.length === 0 && <span className="strip-empty">{t("No buttons to press. Lay a document down and let go.")}</span>}
           {pages.map((p, i) => {
             const d = QUEUE.find((q) => q.id === p.docId)!;
             return (
@@ -774,13 +779,13 @@ function CameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy }: any)
 
         <div className="cam-actions">
           <button className="btn btn-cam" onClick={() => setRunning(!running)} type="button">
-            <Icon name={running ? 'pause' : 'play'} size={16} /> {running ? 'Pause' : 'Resume'}
+            <Icon name={running ? 'pause' : 'play'} size={16} /> {running ? t("Pause") : t("Resume")}
           </button>
-          <div className="speed" role="group" aria-label="Demo speed">
-            <span>Demo speed</span>
+          <div className="speed" role="group" aria-label={t("Demo speed")}>
+            <span>{t("Demo speed")}</span>
             {[1, 3].map((v) => <button key={v} type="button" className={speed === v ? 'on' : ''} onClick={() => setSpeed(v)}>{v}×</button>)}
           </div>
-          <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">Finish archive</button>
+          <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">{t("Finish archive")}</button>
         </div>
       </footer>
     </div>
@@ -822,10 +827,10 @@ function ProcessingScreen({ pages, usedSample, onView, openPrivacy }: any) {
   const stages = [
     ['Documents detected', plural(groups.length, 'document')],
     ['Pages separated', plural(pages.length, 'page')],
-    ['Text extracted', `${ocrCount} of ${pages.length} pages`],
+    ['Text extracted', t('{0} of {1} pages', { 0: ocrCount, 1: pages.length })],
     ['Documents classified', plural(cats, 'category', 'categories')],
     ['Duplicates checked', result ? plural(result.dupes, 'possible duplicate') : '…'],
-    ['Archive created', 'Saved on this device'],
+    ['Archive created', t('Saved on this device')],
   ];
 
   return (
@@ -834,20 +839,20 @@ function ProcessingScreen({ pages, usedSample, onView, openPrivacy }: any) {
       <main className="narrow processing">
         {!result ? (
           <>
-            <h1 className="h-page">Building your archive</h1>
-            <p className="muted">Running on this device. You can put your phone down.</p>
+            <h1 className="h-page">{t("Building your archive")}</h1>
+            <p className="muted">{t("Running on this device. You can put your phone down.")}</p>
           </>
         ) : (
           <>
-            <h1 className="h-page">Your archive is ready</h1>
-            {usedSample && <p className="muted">No pages were captured, so the sample pile was used.</p>}
+            <h1 className="h-page">{t("Your archive is ready")}</h1>
+            {usedSample && <p className="muted">{t("No pages were captured, so the sample pile was used.")}</p>}
           </>
         )}
         <ol className="stages">
           {stages.map(([label, detail], i) => (
             <li key={label} className={i < step ? 'done' : i === step ? 'now' : ''}>
               <span className="stage-mark">{i < step ? <Icon name="check" size={14} /> : i === step ? <span className="spin" /> : null}</span>
-              <span className="stage-label">{label}</span>
+              <span className="stage-label">{t(label)}</span>
               <span className="stage-detail">{i <= step ? detail : ''}</span>
             </li>
           ))}
@@ -855,16 +860,16 @@ function ProcessingScreen({ pages, usedSample, onView, openPrivacy }: any) {
         {result && (
           <>
             <dl className="summary">
-              <div><dt>Documents</dt><dd>{result.docs.length}</dd></div>
-              <div><dt>Pages</dt><dd>{pages.length}</dd></div>
-              <div><dt>Categories</dt><dd>{cats}</dd></div>
-              <div><dt>Possible duplicates</dt><dd>{result.dupes}</dd></div>
-              <div className={review ? 'warn' : ''}><dt>Need review</dt><dd>{review}</dd></div>
+              <div><dt>{t("Documents")}</dt><dd>{result.docs.length}</dd></div>
+              <div><dt>{t("Pages")}</dt><dd>{pages.length}</dd></div>
+              <div><dt>{t("Categories")}</dt><dd>{cats}</dd></div>
+              <div><dt>{t("Possible duplicates")}</dt><dd>{result.dupes}</dd></div>
+              <div className={review ? 'warn' : ''}><dt>{t("Need review")}</dt><dd>{review}</dd></div>
             </dl>
             <div className="cta-row">
-              <button className="btn btn-primary btn-lg" onClick={() => onView(result.docs)} type="button">View archive</button>
+              <button className="btn btn-primary btn-lg" onClick={() => onView(result.docs)} type="button">{t("View archive")}</button>
             </div>
-            <p className="fine"><Icon name="lock" size={13} /> 0 bytes uploaded. Every step above ran in this browser.</p>
+            <p className="fine"><Icon name="lock" size={13} /> {t("0 bytes uploaded. Every step above ran in this browser.")}</p>
           </>
         )}
       </main>
@@ -874,12 +879,12 @@ function ProcessingScreen({ pages, usedSample, onView, openPrivacy }: any) {
 
 /* ---------------- Archive ---------------- */
 function CategoryChip({ c }: { c: Category }) {
-  return <span className={`chip cat-${c.toLowerCase()}`}>{c}</span>;
+  return <span className={`chip cat-${c.toLowerCase().replace(/[^a-z0-9]/g, '')}`}>{tc(c)}</span>;
 }
 
 function ReviewPill({ doc }: { doc: ArchiveDoc }) {
   if (!doc.review) return null;
-  return <span className="pill-warn"><Icon name="alert" size={12} /> {doc.review === 'duplicate' ? 'Possible duplicate' : 'Needs review'}</span>;
+  return <span className="pill-warn"><Icon name="alert" size={12} /> {doc.review === 'duplicate' ? t("Possible duplicate") : t("Needs review")}</span>;
 }
 
 function highlight(text: string, q: string) {
@@ -913,26 +918,26 @@ function DocumentsTab({ docs, onOpen, filter, setFilter }: any) {
     <>
       <div className="search">
         <Icon name="search" />
-        <input id="search" type="search" placeholder="Search documents..." value={q} onChange={(e: any) => setQ(e.target.value)} dir="auto" />
-        {q && <button className="icon-btn" onClick={() => setQ('')} type="button" aria-label="Clear search"><Icon name="close" size={16} /></button>}
+        <input id="search" type="search" placeholder={t("Search documents...")} value={q} onChange={(e: any) => setQ(e.target.value)} dir="auto" />
+        {q && <button className="icon-btn" onClick={() => setQ('')} type="button" aria-label={t("Clear search")}><Icon name="close" size={16} /></button>}
       </div>
-      <div className="try">Try <button type="button" onClick={() => setQ('ארנונה')}>ארנונה</button><button type="button" onClick={() => setQ('437')}>437</button><button type="button" onClick={() => setQ('.10.2025')}>10.2025</button><span>· searches the text inside every page</span></div>
-      <div className="filters" role="tablist" aria-label="Filter">
+      <div className="try">{t("Try")} <button type="button" onClick={() => setQ('ארנונה')}>ארנונה</button><button type="button" onClick={() => setQ('437')}>437</button><button type="button" onClick={() => setQ('.10.2025')}>10.2025</button><span>{t("· searches the text inside every page")}</span></div>
+      <div className="filters" role="tablist" aria-label={t("Filter")}>
         {['All', 'Needs review', ...all].map((f: string) => (
           <button key={f} type="button" role="tab" aria-selected={filter === f} className={`filter ${filter === f ? 'on' : ''} ${f === 'Needs review' && counts[f] ? 'has-warn' : ''}`} onClick={() => setFilter(f)}>
-            {f} <span className="n">{counts[f]}</span>
+            {tc(f)} <span className="n">{counts[f]}</span>
           </button>
         ))}
-        <button type="button" className="filter add" onClick={() => openAdd()}><Icon name="plus" size={14} /> Add category</button>
+        <button type="button" className="filter add" onClick={() => openAdd()}><Icon name="plus" size={14} /> {t("Add category")}</button>
       </div>
       <div className="list">
-        {rows.length === 0 && <div className="empty">No documents match “{query || filter}”.</div>}
+        {rows.length === 0 && <div className="empty">{t("No documents match “{0}”.", { 0: query || tc(filter) })}</div>}
         {rows.map(({ d, hit }: any) => (
           <button key={d.id} className="row" onClick={() => onOpen(d.id)} type="button">
             <div className="thumb"><DocPaper doc={d} /></div>
             <div className="row-main">
               <div className="row-title"><span dir="auto">{highlight(d.title, query)}</span></div>
-              <div className="row-sub"><span dir="auto">{highlight(d.sender, query)}</span><span className="sep">·</span><span className="num">{d.date || 'No date found'}</span></div>
+              <div className="row-sub"><span dir="auto">{d.sender === 'Unknown' ? t('Unknown') : highlight(d.sender, query)}</span><span className="sep">·</span><span className="num">{d.date || t("No date found")}</span></div>
               {hit && <div className="row-hit" dir="rtl">…{highlight(hit, query)}</div>}
               <div className="row-tags"><CategoryChip c={d.category} /><ReviewPill doc={d} /></div>
             </div>
@@ -954,60 +959,60 @@ function ReviewTab({ docs, resolveDuplicate, resolveUnclear, onOpen, deleteDoc }
   const total = docs.length;
   return (
     <div className="review">
-      <h2 className="h-section">{pending.length ? `${plural(pending.length, 'document')} ${pending.length === 1 ? 'needs' : 'need'} your attention` : 'Nothing left to review'}</h2>
+      <h2 className="h-section">{pending.length ? (pending.length === 1 ? t("1 document needs your attention") : t("{0} documents need your attention", { 0: pending.length })) : t("Nothing left to review")}</h2>
       <p className="muted">{pending.length
-        ? `${total - pending.length === 1 ? 'The other document was' : `The other ${total - pending.length} were`} sorted without you. ${pending.length === 1 ? 'This one was' : 'These were'} ambiguous, so the choice is yours.`
-        : `All ${total} documents are filed. You can still change any category from a document’s page.`}</p>
+        ? t("The other {0} were sorted without you. These were ambiguous, so the choice is yours.", { 0: total - pending.length })
+        : t("All {0} documents are filed. You can still change any category from a document’s page.", { 0: total })}</p>
       {pending.map((d: ArchiveDoc) => {
         if (d.review === 'duplicate') {
           const orig = docs.find((o: ArchiveDoc) => o.id === d.duplicateOf);
           return (
             <article className="rcard" key={d.id}>
-              <header><span className="pill-warn"><Icon name="alert" size={12} /> Possible duplicate</span></header>
-              <p className="rcard-lede">Two documents look very similar.</p>
+              <header><span className="pill-warn"><Icon name="alert" size={12} /> {t("Possible duplicate")}</span></header>
+              <p className="rcard-lede">{t("Two documents look very similar.")}</p>
               <div className="pair">
                 {[orig, d].filter(Boolean).map((x: ArchiveDoc, i: number) => (
                   <button key={x.id} className="pair-item" onClick={() => onOpen(x.id)} type="button">
                     <div className="thumb lg"><DocPaper doc={x} /></div>
                     <span dir="auto">{x.sender} · {x.title}</span>
-                    <small>{i === 0 ? 'First copy' : 'Second copy'} · captured {x.capturedAt}</small>
+                    <small>{i === 0 ? t("First copy · captured {0}", { 0: x.capturedAt }) : t("Second copy · captured {0}", { 0: x.capturedAt })}</small>
                   </button>
                 ))}
               </div>
               <ul className="evidence">
-                {d.real ? (<><li>The pages look the same, even though they were framed differently</li><li>The text read from both mostly matches</li>{d.date && <li>Same date ({d.date})</li>}</>) : (<><li>Same sender and date ({d.date})</li><li>Same account number</li><li>Text on both pages matches closely</li></>)}
+                {d.real ? (<><li>{t("The pages look the same, even though they were framed differently")}</li><li>{t("The text read from both mostly matches")}</li>{d.date && <li>{t("Same date ({0})", { 0: d.date })}</li>}</>) : (<><li>{t("Same sender and date ({0})", { 0: d.date })}</li><li>{t("Same account number")}</li><li>{t("Text on both pages matches closely")}</li></>)}
               </ul>
               <div className="rcard-actions">
-                <button className="btn btn-quiet" onClick={() => resolveDuplicate(d.id, false)} type="button">Keep both</button>
-                <button className="btn btn-primary" onClick={() => resolveDuplicate(d.id, true)} type="button">Mark as duplicate</button>
+                <button className="btn btn-quiet" onClick={() => resolveDuplicate(d.id, false)} type="button">{t("Keep both")}</button>
+                <button className="btn btn-primary" onClick={() => resolveDuplicate(d.id, true)} type="button">{t("Mark as duplicate")}</button>
               </div>
             </article>
           );
         }
         return (
           <article className="rcard" key={d.id}>
-            <header><span className="pill-warn"><Icon name="alert" size={12} /> Document type unclear</span></header>
+            <header><span className="pill-warn"><Icon name="alert" size={12} /> {t("Document type unclear")}</span></header>
             <div className="unclear">
-              <button className="thumb lg" onClick={() => onOpen(d.id)} type="button" aria-label="Open document"><DocPaper doc={d} /></button>
+              <button className="thumb lg" onClick={() => onOpen(d.id)} type="button" aria-label={t("Open document")}><DocPaper doc={d} /></button>
               <div>
-                <p className="rcard-lede">{d.real ? (d.ocr && d.ocr.length ? 'No known sender found on this page.' : 'No text could be read from this page.') : 'Handwritten page with no letterhead.'}</p>
+                <p className="rcard-lede">{d.real ? (d.ocr && d.ocr.length ? t("No known sender found on this page.") : t("No text could be read from this page.")) : t("Handwritten page with no letterhead.")}</p>
                 <dl className="detected">
-                  <div><dt>Detected</dt><dd>Sender: {d.sender === 'Unknown' || !d.real ? 'Unknown' : d.sender}</dd></div>
-                  <div><dt>Detected</dt><dd>Date: {d.date || 'not found'}</dd></div>
+                  <div><dt>{t("Detected")}</dt><dd>{t("Sender:")} {d.sender === 'Unknown' || !d.real ? t("Unknown") : d.sender}</dd></div>
+                  <div><dt>{t("Detected")}</dt><dd>{t("Date:")} {d.date || t("not found")}</dd></div>
                 </dl>
               </div>
             </div>
             {choosing && (
               <div className="choose">
-                <span>File it under</span>
-                {all.map((c: string) => <button key={c} type="button" className="filter" onClick={() => { setChoosing(false); resolveUnclear(d.id, c); }}>{c}</button>)}
-                <button type="button" className="filter add" onClick={() => { setChoosing(false); openAdd(d.id); }}><Icon name="plus" size={14} /> New category</button>
+                <span>{t("File it under")}</span>
+                {all.map((c: string) => <button key={c} type="button" className="filter" onClick={() => { setChoosing(false); resolveUnclear(d.id, c); }}>{tc(c)}</button>)}
+                <button type="button" className="filter add" onClick={() => { setChoosing(false); openAdd(d.id); }}><Icon name="plus" size={14} /> {t("New category")}</button>
               </div>
             )}
             <div className="rcard-actions">
-              {d.real && <button className="btn btn-quiet danger" onClick={() => deleteDoc(d.id)} type="button"><Icon name="trash" size={15} /> Not a document</button>}
-              <button className="btn btn-quiet" onClick={() => resolveUnclear(d.id, null)} type="button">Leave unclassified</button>
-              <button className="btn btn-primary" onClick={() => setChoosing(!choosing)} type="button">Choose category</button>
+              {d.real && <button className="btn btn-quiet danger" onClick={() => deleteDoc(d.id)} type="button"><Icon name="trash" size={15} /> {t("Not a document")}</button>}
+              <button className="btn btn-quiet" onClick={() => resolveUnclear(d.id, null)} type="button">{t("Leave unclassified")}</button>
+              <button className="btn btn-primary" onClick={() => setChoosing(!choosing)} type="button">{t("Choose category")}</button>
             </div>
           </article>
         );
@@ -1022,7 +1027,10 @@ const safeName = (t: string) => t.replace(/[\\/:*?"<>|\u0000-\u001F]/g, '').repl
 const fileBase = (d: ArchiveDoc) => safeName(`${isoDate(d.date)} ${d.sender === 'Unknown' ? '' : d.sender + ' - '}${d.title}`) || d.id;
 /** Folder layout shared by every export: Category / Year / file. Stable, so exports merge into one Drive folder. */
 const yearOf = (d: ArchiveDoc) => ((d.date || '').match(/(\d{4})$/) || [])[1] || 'No date';
-const folderFor = (d: ArchiveDoc) => `${safeName(d.category) || 'Other'}/${yearOf(d)}/`;
+/** Folder names use one language for good: the app's language at the first export. Switching the app later doesn't rename folders. */
+const exportLang = (): Lang => { try { const v = localStorage.getItem('pa.exportLang'); if (isLang(v)) return v; localStorage.setItem('pa.exportLang', LANG); } catch { /* storage unavailable */ } return LANG; };
+function inLang<T>(l: Lang, fn: () => T): T { const prev = LANG; LANG = l; try { return fn(); } finally { LANG = prev; } }
+const folderFor = (d: ArchiveDoc) => inLang(exportLang(), () => `${safeName(tc(d.category)) || t('Other')}/${d.date ? yearOf(d) : t('No date')}/`);
 interface IndexRow { d: ArchiveDoc; archive: string; path: string }
 function buildIndexCsv(rows: IndexRow[]): string {
   const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -1115,10 +1123,10 @@ function ExportTab({ docs, toast, archiveName }: any) {
   const set = (id: string, v: any) => setState((s: any) => ({ ...s, [id]: { ...(s[id] || {}), ...v } }));
 
   const options = [
-    { id: 'docs', icon: 'doc', title: 'Download documents', desc: `${plural(scanned.length, 'PDF')} in one ZIP, named by date and sender`, needsScans: true },
-    { id: 'pdf', icon: 'layers', title: 'Download searchable PDF', desc: `One file, ${plural(scanned.reduce((n: number, d: ArchiveDoc) => n + d.pages, 0), 'page')}, text you can search and copy`, needsScans: true },
-    { id: 'csv', icon: 'table', title: 'Download metadata CSV', desc: 'Opens in Excel or Google Sheets, Hebrew included', needsScans: false },
-    { id: 'zip', icon: 'archive', title: 'Download complete archive ZIP', desc: 'Category / Year folders with PDFs, original photos, extracted text and index.csv', needsScans: false },
+    { id: 'docs', icon: 'doc', title: t('Download documents'), desc: t('{0} in one ZIP, named by date and sender', { 0: plural(scanned.length, 'PDF') }), needsScans: true },
+    { id: 'pdf', icon: 'layers', title: t('Download searchable PDF'), desc: t('One file, {0}, text you can search and copy', { 0: plural(scanned.reduce((n: number, d: ArchiveDoc) => n + d.pages, 0), 'page') }), needsScans: true },
+    { id: 'csv', icon: 'table', title: t('Download metadata CSV'), desc: t('Opens in Excel or Google Sheets, Hebrew included'), needsScans: false },
+    { id: 'zip', icon: 'archive', title: t('Download complete archive ZIP'), desc: t('Category / Year folders with PDFs, original photos, extracted text and index.csv'), needsScans: false },
   ];
 
   async function build(id: string, progress: (p: number) => void): Promise<{ blob: Blob; name: string }> {
@@ -1172,13 +1180,13 @@ function ExportTab({ docs, toast, archiveName }: any) {
     const url = URL.createObjectURL(st.blob);
     const a = document.createElement('a'); a.href = url; a.download = st.name!; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    toast(inFrame ? 'Claude’s preview blocks saving. Use the hosted site to save files.' : `Saved to your ${where}`);
+    toast(inFrame ? t("Claude’s preview blocks saving. Use the hosted site to save files.") : t("Saved to your {0}", { 0: t(where) }));
   }
   async function share(id: string) {
     const st = state[id]; if (!st?.blob) return;
     const file = new File([st.blob], st.name!, { type: st.blob.type });
     try { await (navigator as any).share({ files: [file], title: st.name }); }
-    catch (e: any) { if (e?.name !== 'AbortError') toast('Sharing isn’t available here. Use Save instead.'); }
+    catch (e: any) { if (e?.name !== 'AbortError') toast(t("Sharing isn’t available here. Use Save instead.")); }
   }
   const canShareFiles = (b?: Blob, n?: string) => {
     try { return !!b && !!(navigator as any).canShare?.({ files: [new File([b], n || 'f', { type: b.type })] }); } catch { return false; }
@@ -1187,8 +1195,8 @@ function ExportTab({ docs, toast, archiveName }: any) {
 
   return (
     <div className="export">
-      <h2 className="h-section">Export archive</h2>
-      <div className="local-banner"><Icon name="device" size={18} /> Everything is generated on your device. Your documents are never uploaded.</div>
+      <h2 className="h-section">{t("Export archive")}</h2>
+      <div className="local-banner"><Icon name="device" size={18} /> {t("Everything is generated on your device. Your documents are never uploaded.")}</div>
       <div className="exports">
         {options.map((o) => {
           const st = state[o.id] || { status: 'idle', progress: 0 };
@@ -1198,19 +1206,19 @@ function ExportTab({ docs, toast, archiveName }: any) {
               <span className="export-icon"><Icon name={o.icon} size={20} /></span>
               <div className="export-main">
                 <strong>{o.title}</strong>
-                <span>{disabled ? 'Needs scanned pages. The sample documents have none.' : o.desc}</span>
+                <span>{disabled ? t("Needs scanned pages. The sample documents have none.") : o.desc}</span>
                 {st.status === 'working' && <div className="progress"><i style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
-                {st.status === 'ready' && <span className="ready"><Icon name="check" size={14} /> Ready · {st.name} · {fmtSize(st.blob!.size)}</span>}
+                {st.status === 'ready' && <span className="ready"><Icon name="check" size={14} /> {t("Ready")} · {st.name} · {fmtSize(st.blob!.size)}</span>}
                 {st.status === 'error' && <span className="form-error">{st.error}</span>}
               </div>
               {st.status === 'ready' ? (
                 <div className="export-actions">
-                  <button className="btn btn-primary" onClick={() => save(o.id)} type="button"><Icon name="download" size={16} /> Save</button>
-                  {canShareFiles(st.blob, st.name) && <button className="btn btn-quiet" onClick={() => share(o.id)} type="button">Share…</button>}
+                  <button className="btn btn-primary" onClick={() => save(o.id)} type="button"><Icon name="download" size={16} /> {t("Save")}</button>
+                  {canShareFiles(st.blob, st.name) && <button className="btn btn-quiet" onClick={() => share(o.id)} type="button">{t("Share…")}</button>}
                 </div>
               ) : (
                 <button className="btn btn-quiet" disabled={disabled || st.status === 'working'} onClick={() => prepare(o.id)} type="button">
-                  {st.status === 'working' ? `${Math.round(st.progress * 100)}%` : 'Prepare'}
+                  {st.status === 'working' ? `${Math.round(st.progress * 100)}%` : t("Prepare")}
                 </button>
               )}
               {o.id === 'csv' && st.status === 'ready' && (
@@ -1220,7 +1228,7 @@ function ExportTab({ docs, toast, archiveName }: any) {
           );
         })}
       </div>
-      <p className="fine">Save puts the file in your {where}. Share… lets you send it to Google Drive, WhatsApp, email or Files instead.</p>
+      <p className="fine">{t("Save puts the file in your {0}. Share… lets you send it to Google Drive, WhatsApp, email or Files instead.", { 0: t(where) })}</p>
     </div>
   );
 }
@@ -1284,22 +1292,22 @@ function MovePageSheet({ docs, from, onPick, onClose }: any) {
   const others = docs.filter((d: ArchiveDoc) => d.id !== from.id && d.images?.length);
   return (
     <div className="sheet-wrap" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label="Move page" onClick={(e: any) => e.stopPropagation()}>
-        <div className="sheet-head"><h2>Move this page to…</h2>
-          <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button></div>
+      <div className="sheet" role="dialog" aria-label={t("Move page")} onClick={(e: any) => e.stopPropagation()}>
+        <div className="sheet-head"><h2>{t("Move this page to…")}</h2>
+          <button className="icon-btn" onClick={onClose} type="button" aria-label={t("Close")}><Icon name="close" /></button></div>
         <div className="move-list">
           <button type="button" className="move-item new" onClick={() => onPick('new')}>
             <span className="move-new"><Icon name="plus" size={18} /></span>
-            <span><strong>A new document</strong><small>Sorted on its own from this page’s text</small></span>
+            <span><strong>{t("A new document")}</strong><small>{t("Sorted on its own from this page’s text")}</small></span>
           </button>
           {others.map((d: ArchiveDoc) => (
             <button type="button" className="move-item" key={d.id} onClick={() => onPick(d.id)}>
               <span className="thumb"><DocPaper doc={d} /></span>
-              <span><strong dir="auto">{d.title}</strong><small dir="auto">{d.sender === 'Unknown' ? '' : d.sender + ' · '}{d.date || 'No date'} · {plural(d.pages, 'page')}</small></span>
+              <span><strong dir="auto">{d.title}</strong><small dir="auto">{d.sender === 'Unknown' ? '' : d.sender + ' · '}{d.date || t("No date")} · {plural(d.pages, 'page')}</small></span>
             </button>
           ))}
         </div>
-        <p className="fine">The page is added at the end. You can then move it earlier.</p>
+        <p className="fine">{t("The page is added at the end. You can then move it earlier.")}</p>
       </div>
     </div>
   );
@@ -1309,7 +1317,7 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ title: '', sender: '', date: '', amount: '' });
   const wasEdited = (f: string) => (doc.edited || []).includes(f);
-  const tag = (f: string, detected: boolean) => (wasEdited(f) ? 'Set by you' : detected ? 'Detected' : '');
+  const tag = (f: string, detected: boolean) => (wasEdited(f) ? t('Set by you') : detected ? t('Detected') : '');
   const toIso = (d: string) => { const m = (d || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
   const fromIso = (d: string) => { const m = (d || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
   function startEdit() {
@@ -1355,24 +1363,24 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
   return (
     <div className="detail" role="dialog" aria-label={doc.title}>
       <div className="detail-bar">
-        <button className="link-back" onClick={onBack} type="button"><Icon name="back" size={16} /> My Archive</button>
+        <button className="link-back" onClick={onBack} type="button"><Icon name="back" size={16} /> {t("My Archive")}</button>
       </div>
       <div className="detail-grid">
         <section className="detail-preview">
           <div className="big-paper"><DocPaper doc={doc} page={page} /></div>
           {editable ? (
-            <div className="page-strip" role="group" aria-label="Pages">
+            <div className="page-strip" role="group" aria-label={t("Pages")}>
               {Array.from({ length: doc.pages }).map((_, i) => (
-                <button key={(doc.pageKeys || [])[i] || i} type="button" className={`page-thumb ${i === page ? 'on' : ''}`} onClick={() => setPage(i)} aria-label={`Page ${i + 1}`}>
+                <button key={(doc.pageKeys || [])[i] || i} type="button" className={`page-thumb ${i === page ? 'on' : ''}`} onClick={() => setPage(i)} aria-label={t("Page {0}", { 0: i + 1 })}>
                   <img src={doc.thumbs?.[i] || doc.images[i]} alt="" /><span>{i + 1}</span>
                 </button>
               ))}
-              <button type="button" className="page-add" onClick={() => onPages.addPages(doc.id)} aria-label="Scan more pages into this document">
-                <Icon name="plus" size={18} /><small>Add page</small>
+              <button type="button" className="page-add" onClick={() => onPages.addPages(doc.id)} aria-label={t("Scan more pages into this document")}>
+                <Icon name="plus" size={18} /><small>{t("Add page")}</small>
               </button>
             </div>
           ) : doc.pages > 1 && (
-            <div className="pager" role="group" aria-label="Pages">
+            <div className="pager" role="group" aria-label={t("Pages")}>
               {Array.from({ length: doc.pages }).map((_, i) => (
                 <button key={i} type="button" className={i === page ? 'on' : ''} onClick={() => setPage(i)}>{i + 1}</button>
               ))}
@@ -1380,26 +1388,26 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
           )}
           {editable && (
             confirmPageDel ? (
-              <div className="page-actions confirm-row"><span>Delete page {page + 1}{doc.pages === 1 ? ' and this document' : ''}?</span>
-                <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmPageDel(false)}>Cancel</button>
-                <button className="btn btn-danger btn-sm" type="button" onClick={() => { setConfirmPageDel(false); onPages.remove(doc.id, page); }}>Delete</button>
+              <div className="page-actions confirm-row"><span>{doc.pages === 1 ? t("Delete page {0} and this document?", { 0: page + 1 }) : t("Delete page {0}?", { 0: page + 1 })}</span>
+                <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmPageDel(false)}>{t("Cancel")}</button>
+                <button className="btn btn-danger btn-sm" type="button" onClick={() => { setConfirmPageDel(false); onPages.remove(doc.id, page); }}>{t("Delete")}</button>
               </div>
             ) : (
-              <div className="page-actions" role="group" aria-label={`Page ${page + 1} of ${doc.pages}`}>
-                <span className="page-label num">Page {page + 1} of {doc.pages}</span>
-                <button className="btn btn-quiet btn-sm" type="button" disabled={page === 0} onClick={() => move(page - 1)} aria-label="Move page earlier"><Icon name="back" size={15} /> Earlier</button>
-                <button className="btn btn-quiet btn-sm" type="button" disabled={page >= doc.pages - 1} onClick={() => move(page + 1)} aria-label="Move page later">Later <span className="flip"><Icon name="back" size={15} /></span></button>
-                <button className="btn btn-quiet btn-sm" type="button" onClick={() => onPages.retake(doc.id, page)}><Icon name="camera" size={15} /> Retake</button>
-                <button className="btn btn-quiet btn-sm" type="button" onClick={() => setMoving(true)}>Move to…</button>
-                <button className="icon-btn" type="button" onClick={() => setConfirmPageDel(true)} aria-label="Delete this page"><Icon name="trash" size={16} /></button>
+              <div className="page-actions" role="group" aria-label={t("Page {0} of {1}", { 0: page + 1, 1: doc.pages })}>
+                <span className="page-label num">{t("Page {0} of {1}", { 0: page + 1, 1: doc.pages })}</span>
+                <button className="btn btn-quiet btn-sm" type="button" disabled={page === 0} onClick={() => move(page - 1)} aria-label={t("Move page earlier")}><Icon name="back" size={15} /> {t("Earlier")}</button>
+                <button className="btn btn-quiet btn-sm" type="button" disabled={page >= doc.pages - 1} onClick={() => move(page + 1)} aria-label={t("Move page later")}>{t("Later")} <span className="flip"><Icon name="back" size={15} /></span></button>
+                <button className="btn btn-quiet btn-sm" type="button" onClick={() => onPages.retake(doc.id, page)}><Icon name="camera" size={15} /> {t("Retake")}</button>
+                <button className="btn btn-quiet btn-sm" type="button" onClick={() => setMoving(true)}>{t("Move to…")}</button>
+                <button className="icon-btn" type="button" onClick={() => setConfirmPageDel(true)} aria-label={t("Delete this page")}><Icon name="trash" size={16} /></button>
               </div>
             )
           )}
           <div className="preview-tools">
-            <button className="btn btn-quiet" onClick={() => setOriginal(true)} type="button"><Icon name="eye" size={16} /> View original page</button>
+            <button className="btn btn-quiet" onClick={() => setOriginal(true)} type="button"><Icon name="eye" size={16} /> {t("View original page")}</button>
           </div>
           {doc.sources?.[page] && (
-            <p className="fine scan-src">Scan {doc.sources[page].size ? `${doc.sources[page].size[0]} × ${doc.sources[page].size[1]} px` : ''} · from the {doc.sources[page].from === 'photo' ? 'full-resolution camera photo' : 'video picture'}</p>
+            <p className="fine scan-src">{doc.sources[page].from === 'photo' ? t("Scan {0} · from the full-resolution camera photo", { 0: doc.sources[page].size ? `${doc.sources[page].size[0]} × ${doc.sources[page].size[1]} px` : '' }) : t("Scan {0} · from the video picture", { 0: doc.sources[page].size ? `${doc.sources[page].size[0]} × ${doc.sources[page].size[1]} px` : '' })}</p>
           )}
           {moving && <MovePageSheet docs={docs} from={doc} onClose={() => setMoving(false)} onPick={(target: string) => { setMoving(false); onPages.moveTo(doc.id, page, target); }} />}
         </section>
@@ -1407,73 +1415,73 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
         <section className="detail-info">
           {doc.review && (
             <button className="review-banner" onClick={goReview} type="button">
-              <Icon name="alert" size={16} /> {doc.review === 'duplicate' ? 'Possible duplicate of another document.' : 'Document type unclear.'} <u>Review</u>
+              <Icon name="alert" size={16} /> {doc.review === 'duplicate' ? t("Possible duplicate of another document.") : t("Document type unclear.")} <u>{t("Review")}</u>
             </button>
           )}
           <h1 className="detail-title"><span dir="auto">{doc.title}</span></h1>
           <div className="detail-cat">
-            <label htmlFor="cat">Looks like</label>
+            <label htmlFor="cat">{t("Looks like")}</label>
             <select id="cat" value={doc.category} onChange={(e: any) => (e.target.value === '__new' ? openAdd(doc.id) : onChangeCategory(doc.id, e.target.value))}>
-              {all.map((c: string) => <option key={c} value={c}>{c}</option>)}
-              <option value="__new">+ New category…</option>
+              {all.map((c: string) => <option key={c} value={c}>{tc(c)}</option>)}
+              <option value="__new">{t("+ New category…")}</option>
             </select>
           </div>
           {editing ? (
             <form className="edit-form" onSubmit={(e: any) => { e.preventDefault(); saveEdit(); }}>
-              <label className="field" htmlFor="ed-title"><span>Title</span><input id="ed-title" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} dir="auto" /></label>
-              <label className="field" htmlFor="ed-sender"><span>Sender</span><input id="ed-sender" value={form.sender} onChange={(e: any) => setForm({ ...form, sender: e.target.value })} dir="auto" placeholder="e.g. חברת החשמל" /></label>
-              <label className="field" htmlFor="ed-date"><span>Date</span><input id="ed-date" type="date" value={form.date} onChange={(e: any) => setForm({ ...form, date: e.target.value })} /></label>
-              <label className="field" htmlFor="ed-amount"><span>Amount</span><input id="ed-amount" value={form.amount} onChange={(e: any) => setForm({ ...form, amount: e.target.value })} inputMode="decimal" placeholder="₪0.00" dir="ltr" /></label>
+              <label className="field" htmlFor="ed-title"><span>{t("Title")}</span><input id="ed-title" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} dir="auto" /></label>
+              <label className="field" htmlFor="ed-sender"><span>{t("Sender")}</span><input id="ed-sender" value={form.sender} onChange={(e: any) => setForm({ ...form, sender: e.target.value })} dir="auto" placeholder="e.g. חברת החשמל" /></label>
+              <label className="field" htmlFor="ed-date"><span>{t("Date")}</span><input id="ed-date" type="date" value={form.date} onChange={(e: any) => setForm({ ...form, date: e.target.value })} /></label>
+              <label className="field" htmlFor="ed-amount"><span>{t("Amount")}</span><input id="ed-amount" value={form.amount} onChange={(e: any) => setForm({ ...form, amount: e.target.value })} inputMode="decimal" placeholder="₪0.00" dir="ltr" /></label>
               <div className="cta-row end">
-                <button className="btn btn-quiet" type="button" onClick={() => setEditing(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit">Save</button>
+                <button className="btn btn-quiet" type="button" onClick={() => setEditing(false)}>{t("Cancel")}</button>
+                <button className="btn btn-primary" type="submit">{t("Save")}</button>
               </div>
             </form>
           ) : (
             <>
               <dl className="fields">
-                <div><dt>Sender</dt><dd><span dir="auto">{isUnknown(doc) ? 'Not detected' : doc.sender}</span><em>{tag('sender', !isUnknown(doc))}</em></dd></div>
-                <div><dt>Date</dt><dd className="num">{doc.date ? <>{doc.date}<em>{doc.kind === 'handwritten' && !wasEdited('date') ? 'Low certainty' : tag('date', true)}</em></> : (
-                  <><span className="muted">No date found</span>{onEdit && <button type="button" className="link-btn" onClick={lookAgain}>Look again</button>}</>
+                <div><dt>{t("Sender")}</dt><dd><span dir="auto">{isUnknown(doc) ? t("Not detected") : doc.sender}</span><em>{tag('sender', !isUnknown(doc))}</em></dd></div>
+                <div><dt>{t("Date")}</dt><dd className="num">{doc.date ? <>{doc.date}<em>{doc.kind === 'handwritten' && !wasEdited('date') ? t("Low certainty") : tag('date', true)}</em></> : (
+                  <><span className="muted">{t("No date found")}</span>{onEdit && <button type="button" className="link-btn" onClick={lookAgain}>{t("Look again")}</button>}</>
                 )}</dd></div>
-                <div><dt>Amount</dt><dd className="num">{doc.amount ? <>{doc.amount}<em>{tag('amount', true)}</em></> : <span className="muted">No amount found</span>}</dd></div>
-                <div><dt>Pages</dt><dd>{doc.pages}</dd></div>
-                <div><dt>Captured</dt><dd>Today, {doc.capturedAt} · stored on this device</dd></div>
+                <div><dt>{t("Amount")}</dt><dd className="num">{doc.amount ? <>{doc.amount}<em>{tag('amount', true)}</em></> : <span className="muted">{t("No amount found")}</span>}</dd></div>
+                <div><dt>{t("Pages")}</dt><dd>{doc.pages}</dd></div>
+                <div><dt>{t("Captured")}</dt><dd>{t("Today, {0} · stored on this device", { 0: doc.capturedAt })}</dd></div>
               </dl>
-              {onEdit && <button className="btn btn-quiet btn-sm edit-btn" type="button" onClick={startEdit}><Icon name="pencil" size={15} /> Edit details</button>}
+              {onEdit && <button className="btn btn-quiet btn-sm edit-btn" type="button" onClick={startEdit}><Icon name="pencil" size={15} /> {t("Edit details")}</button>}
             </>
           )}
 
-          <h2 className="h-sub">Why we classified this</h2>
+          <h2 className="h-sub">{t("Why we classified this")}</h2>
           <ul className="reasons">
             {reasonsFor(doc).map((r) => (
-              <li key={r.label}><span className="r-k">{r.label}:</span> <span className="r-v" dir="auto">{r.value}</span><small dir="auto">{r.source}</small></li>
+              <li key={r.label}><span className="r-k">{tr(r.label)}:</span> <span className="r-v" dir="auto">{tr(r.value)}</span><small dir="auto">{tr(r.source)}</small></li>
             ))}
           </ul>
 
-          <h2 className="h-sub">Extracted text</h2>
-          <div className="ocr" dir="rtl" lang="he">{lines.length ? lines.map((l, i) => <div key={i} dir="auto">{l}</div>) : <div className="muted" dir="ltr">No text was read from this page.</div>}</div>
-          <p className="fine">Read automatically on this device and may contain mistakes. If a detail matters, check the original page.</p>
+          <h2 className="h-sub">{t("Extracted text")}</h2>
+          <div className="ocr" dir="rtl" lang="he">{lines.length ? lines.map((l, i) => <div key={i} dir="auto">{l}</div>) : <div className="muted" dir="ltr">{t("No text was read from this page.")}</div>}</div>
+          <p className="fine">{t("Read automatically on this device and may contain mistakes. If a detail matters, check the original page.")}</p>
           {onDelete && (confirmDel ? (
-            <div className="confirm del-row"><span>Delete this document from the archive?</span>
-              <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmDel(false)}>Cancel</button>
-              <button className="btn btn-danger btn-sm" type="button" onClick={() => onDelete(doc.id)}>Delete</button></div>
+            <div className="confirm del-row"><span>{t("Delete this document from the archive?")}</span>
+              <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmDel(false)}>{t("Cancel")}</button>
+              <button className="btn btn-danger btn-sm" type="button" onClick={() => onDelete(doc.id)}>{t("Delete")}</button></div>
           ) : (
-            <button className="btn btn-quiet btn-sm danger del-row" type="button" onClick={() => setConfirmDel(true)}><Icon name="trash" size={15} /> Delete document</button>
+            <button className="btn btn-quiet btn-sm danger del-row" type="button" onClick={() => setConfirmDel(true)}><Icon name="trash" size={15} /> {t("Delete document")}</button>
           ))}
         </section>
       </div>
 
       {original && (
-        <div className="original" role="dialog" aria-label="Original page" onClick={() => setOriginal(false)}>
+        <div className="original" role="dialog" aria-label={t("Original page")} onClick={() => setOriginal(false)}>
           <div className="original-inner" onClick={(e: any) => e.stopPropagation()}>
             <div className="original-head">
-              <span>Original capture · page {page + 1} of {doc.pages} · {doc.capturedAt}</span>
-              <button className="icon-btn light" onClick={() => setOriginal(false)} type="button" aria-label="Close"><Icon name="close" /></button>
+              <span>{t("Original capture · page {0} of {1}", { 0: page + 1, 1: doc.pages })} · {doc.capturedAt}</span>
+              <button className="icon-btn light" onClick={() => setOriginal(false)} type="button" aria-label={t("Close")}><Icon name="close" /></button>
             </div>
             {doc.originals ? (
               <div className="orig-real" style={{ width: `min(100%, calc(68vh * ${doc.originals[page]?.ratio || 1}))` }}>
-                <img src={doc.originals[page]?.src} alt="Original camera frame" />
+                <img src={doc.originals[page]?.src} alt={t("Original camera frame")} />
                 <svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
                   <polygon points={(doc.originals[page]?.quad || []).map((p: number[]) => p.join(',')).join(' ')} />
                 </svg>
@@ -1483,7 +1491,7 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
                 <div className="original-paper" style={{ transform: `rotate(${doc.tilt}deg) perspective(900px) rotateX(7deg)` }}><DocPaper doc={doc} page={page} /></div>
               </div>
             )}
-            <p>The unedited camera frame{doc.originals ? ', with the outline that was detected' : ''}, kept so you can always check what was actually on the paper.</p>
+            <p>{doc.originals ? t("The unedited camera frame, with the outline that was detected, kept so you can always check what was actually on the paper.") : t("The unedited camera frame, kept so you can always check what was actually on the paper.")}</p>
           </div>
         </div>
       )}
@@ -1557,40 +1565,40 @@ function LibraryExportSheet({ sessions, onClose, onExported, toast }: any) {
 
   return (
     <div className="sheet-wrap" onClick={onClose}>
-      <div className="sheet lib-sheet" role="dialog" aria-label="Export archives" onClick={(e: any) => e.stopPropagation()}>
+      <div className="sheet lib-sheet" role="dialog" aria-label={t("Export archives")} onClick={(e: any) => e.stopPropagation()}>
         <div className="sheet-head">
           <span className="privacy-icon cat-icon"><Icon name="archive" size={20} /></span>
-          <h2>Export to your folder</h2>
-          <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button>
+          <h2>{t("Export to your folder")}</h2>
+          <button className="icon-btn" onClick={onClose} type="button" aria-label={t("Close")}><Icon name="close" /></button>
         </div>
-        <p className="muted lib-intro">One ZIP for several archives, with the same folders every time: <b>Category / Year</b>. Unzip it into the same folder (for example in Google Drive) and it merges with what's already there.</p>
+        <p className="muted lib-intro">{t("One ZIP for several archives, with the same folders every time: Category / Year. Unzip it into the same folder (for example in Google Drive) and it merges with what's already there.")}</p>
         <fieldset className="lib-list">
-          <legend>Archives</legend>
+          <legend>{t("Archives")}</legend>
           {sessions.map((s: SessionMeta) => (
             <label key={s.id} className={selected.has(s.id) ? 'on' : ''}>
               <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
-              <span><strong dir="auto">{s.name}</strong><small>{plural(s.docs.length, 'document')}{s.docs.some((d: any) => d.exportedAt) ? ` · ${s.docs.filter((d: any) => !d.exportedAt).length} new` : ' · not exported yet'}</small></span>
+              <span><strong dir="auto">{s.name}</strong><small>{plural(s.docs.length, 'document')}{s.docs.some((d: any) => d.exportedAt) ? t(" · {0} new", { 0: s.docs.filter((d: any) => !d.exportedAt).length }) : t(" · not exported yet")}</small></span>
             </label>
           ))}
         </fieldset>
         <div className="lib-opts">
-          <label><input type="checkbox" checked={onlyNew} onChange={(e: any) => setOnlyNew(e.target.checked)} /> Only documents not exported before <small>({newDocs} of {allDocs})</small></label>
-          <label><input type="checkbox" checked={texts} onChange={(e: any) => setTexts(e.target.checked)} /> Text files next to each PDF</label>
-          <label><input type="checkbox" checked={photos} onChange={(e: any) => setPhotos(e.target.checked)} /> Original camera photos <small>(larger)</small></label>
+          <label><input type="checkbox" checked={onlyNew} onChange={(e: any) => setOnlyNew(e.target.checked)} /> {t("Only documents not exported before")} <small>({t("{0} of {1}", { 0: newDocs, 1: allDocs })})</small></label>
+          <label><input type="checkbox" checked={texts} onChange={(e: any) => setTexts(e.target.checked)} /> {t("Text files next to each PDF")}</label>
+          <label><input type="checkbox" checked={photos} onChange={(e: any) => setPhotos(e.target.checked)} /> {t("Original camera photos")} <small>{t("(larger)")}</small></label>
         </div>
-        <p className="fine">index.csv always lists all {allDocs} documents from the chosen archives, so the copy in your folder stays complete.</p>
+        <p className="fine">{t("index.csv always lists all {0} documents from the chosen archives, so the copy in your folder stays complete.", { 0: allDocs })}</p>
         {st.status === 'working' && <div className="progress"><i style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
         {st.status === 'error' && <p className="form-error">{st.error}</p>}
-        {st.status === 'ready' && <p className="ready"><Icon name="check" size={14} /> Ready · {st.name} · {fmt(st.blob.size)} · {plural(st.files, 'new PDF')}, index of {st.rows}</p>}
+        {st.status === 'ready' && <p className="ready"><Icon name="check" size={14} /> {t("Ready")} · {st.name} · {fmt(st.blob.size)} · {t("{0} new PDFs, index of {1}", { 0: st.files, 1: st.rows })}</p>}
         <div className="cta-row end">
           {st.status === 'ready' ? (
             <>
-              {canShareBlob(st.blob, st.name) && <button className="btn btn-quiet" type="button" onClick={async () => { try { if (await shareBlob(st.blob, st.name)) { finish(); } } catch { toast('Sharing isn’t available here. Use Save instead.'); } }}>Share…</button>}
-              <button className="btn btn-primary" type="button" onClick={() => { saveBlob(st.blob, st.name); finish(); toast(`Saved to your ${downloadsPlace()}`); }}><Icon name="download" size={16} /> Save</button>
+              {canShareBlob(st.blob, st.name) && <button className="btn btn-quiet" type="button" onClick={async () => { try { if (await shareBlob(st.blob, st.name)) { finish(); } } catch { toast('Sharing isn’t available here. Use Save instead.'); } }}>{t("Share…")}</button>}
+              <button className="btn btn-primary" type="button" onClick={() => { saveBlob(st.blob, st.name); finish(); toast(t('Saved to your {0}', { 0: t(downloadsPlace()) })); }}><Icon name="download" size={16} /> {t("Save")}</button>
             </>
           ) : (
             <button className="btn btn-primary" type="button" disabled={!chosen.length || st.status === 'working'} onClick={prepare}>
-              {st.status === 'working' ? `${Math.round(st.progress * 100)}%` : onlyNew && !newDocs ? 'Prepare updated index' : 'Prepare export'}
+              {st.status === 'working' ? `${Math.round(st.progress * 100)}%` : onlyNew && !newDocs ? t("Prepare updated index") : t("Prepare export")}
             </button>
           )}
         </div>
@@ -1622,8 +1630,8 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
   const update = (id: string, patch: Partial<ArchiveDoc>) => setDocs((ds: ArchiveDoc[]) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
 
   function resolveDuplicate(id: string, isDup: boolean) {
-    if (isDup) { setDocs((ds: ArchiveDoc[]) => ds.filter((d) => d.id !== id)); toast('Marked as duplicate. The first copy is kept.'); }
-    else { update(id, { review: undefined }); toast('Kept both copies'); }
+    if (isDup) { setDocs((ds: ArchiveDoc[]) => ds.filter((d) => d.id !== id)); toast(t("Marked as duplicate. The first copy is kept.")); }
+    else { update(id, { review: undefined }); toast(t("Kept both copies")); }
   }
   const pageOps = {
     retake(id: string, i: number) { onScanFor?.(id, 'retake', i); },
@@ -1635,7 +1643,7 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
       if (key) store.deletePages([key]).catch(() => {});
       if (d.pages <= 1) { deleteDoc(id); return; }
       setDocs((ds: ArchiveDoc[]) => ds.map((x) => (x.id === id ? withPages(x, [...Array(x.pages).keys()].filter((k) => k !== i)) : x)));
-      toast('Page deleted');
+      toast(t("Page deleted"));
     },
     moveTo(id: string, i: number, target: string) {
       const src = docs.find((x: ArchiveDoc) => x.id === id); if (!src) return;
@@ -1655,19 +1663,19 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
         return out;
       });
       const name = target === 'new' ? 'a new document' : `“${docs.find((x: ArchiveDoc) => x.id === target)?.title || 'the document'}”`;
-      toast(`Page moved to ${name}`);
+      toast(t("Page moved to {0}", { 0: name }));
       if (!rest.length) setTimeout(() => setOpenId(null), 0);
     },
   };
   function deleteDoc(id: string) {
     setDocs((ds: ArchiveDoc[]) => ds.filter((d) => d.id !== id));
     if (openIdRef.current === id) setOpenId(null);
-    toast('Deleted from this archive');
+    toast(t("Deleted from this archive"));
   }
   function resolveUnclear(id: string, c: string | null) {
     const target = docs.find((x: ArchiveDoc) => x.id === id);
     update(id, target?.real ? { review: undefined, category: c || 'Other' } : { review: undefined, category: c || 'Other', title: c ? 'הערה בכתב יד' : 'מסמך לא מזוהה' });
-    toast(c ? `Filed under ${c}` : 'Left unclassified, filed under Other');
+    toast(c ? t("Filed under {0}", { 0: tc(c) }) : t("Left unclassified, filed under Other"));
   }
 
   useEffect(() => { window.scrollTo(0, 0); }, [openId, tab]);
@@ -1686,19 +1694,19 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
     <div className="page">
       <AppHeader onHome={onAllArchives} openPrivacy={openPrivacy}
         right={<>
-          <button className="btn btn-quiet btn-sm" onClick={onAllArchives} type="button"><Icon name="list" size={16} /> All archives</button>
+          <button className="btn btn-quiet btn-sm" onClick={onAllArchives} type="button"><Icon name="list" size={16} /> {t("All archives")}</button>
 
         </>} />
       <main className="archive">
         <div className="archive-head">
-          {archiveName && <button className="btn btn-primary btn-sm scan-more" onClick={onNewSession} type="button"><Icon name="camera" size={16} /> Scan more documents</button>}
-          <h1 className="h-page" dir="auto">{archiveName || 'My Archive'}</h1>
-          <p className="muted num">{plural(docs.length, 'document')} · {plural(pages, 'page')}{archiveName ? ' · saved on this device' : ' · sample, not saved'}</p>
+          {archiveName && <button className="btn btn-primary btn-sm scan-more" onClick={onNewSession} type="button"><Icon name="camera" size={16} /> {t("Scan more documents")}</button>}
+          <h1 className="h-page" dir="auto">{archiveName || t("My Archive")}</h1>
+          <p className="muted num">{plural(docs.length, 'document')} · {plural(pages, 'page')}{archiveName ? t(" · saved on this device") : t(" · sample, not saved")}</p>
         </div>
-        <nav className="tabs" aria-label="Archive sections">
-          <button type="button" className={tab === 'docs' ? 'on' : ''} onClick={() => setTab('docs')}>Documents</button>
-          <button type="button" className={tab === 'review' ? 'on' : ''} onClick={() => setTab('review')}>Needs review {pending > 0 && <span className="badge">{pending}</span>}</button>
-          <button type="button" className={tab === 'export' ? 'on' : ''} onClick={() => setTab('export')}>Export</button>
+        <nav className="tabs" aria-label={t("Archive sections")}>
+          <button type="button" className={tab === 'docs' ? 'on' : ''} onClick={() => setTab('docs')}>{t("Documents")}</button>
+          <button type="button" className={tab === 'review' ? 'on' : ''} onClick={() => setTab('review')}>{t("Needs review")} {pending > 0 && <span className="badge">{pending}</span>}</button>
+          <button type="button" className={tab === 'export' ? 'on' : ''} onClick={() => setTab('export')}>{t("Export")}</button>
         </nav>
         {tab === 'docs' && <DocumentsTab docs={docs} onOpen={setOpenId} filter={filter} setFilter={setFilter} />}
         {tab === 'review' && <ReviewTab docs={docs} resolveDuplicate={resolveDuplicate} resolveUnclear={resolveUnclear} onOpen={setOpenId} deleteDoc={deleteDoc} />}
@@ -1712,38 +1720,44 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
 const TERMS_VERSION = 1;
 const termsAccepted = () => { try { return Number(localStorage.getItem('pa.terms') || 0) >= TERMS_VERSION; } catch { return false; } };
 const acceptTerms = () => { try { localStorage.setItem('pa.terms', String(TERMS_VERSION)); } catch { /* storage unavailable */ } };
+const TERMS: Record<Lang, { h: string; p: string }[]> = {
+  en: [
+    { h: 'Your documents stay on this device', p: 'Scanning, reading text and sorting all happen in this browser. There is no account and no server. The developer never receives, sees or stores your documents.' },
+    { h: 'Detected details can be wrong', p: 'Sender, dates, amounts, categories and duplicates are automatic guesses. Always check the original page before relying on any detail. The app does not give legal, tax or financial advice, and does not tell you whether a document is correct or what you need to do.' },
+    { h: 'Keep your own copies', p: 'Archives are stored only in this browser on this phone. Clearing browser data, using a private window, removing the browser or changing phones deletes them. Export regularly and keep the files somewhere you trust. You are responsible for your backups and for where you store exported files. Keep original paper documents wherever you are required to.' },
+    { h: 'Provided as is', p: 'Paper Archive is provided “as is”, without warranty of any kind. To the extent permitted by law, the developer is not liable for any loss of data or any damage arising from using it.' },
+  ],
+  he: [
+    { h: 'המסמכים שלך נשארים במכשיר', p: 'הסריקה, קריאת הטקסט והמיון מתבצעים כולם בדפדפן הזה. אין חשבון משתמש ואין שרת. המפתח אינו מקבל, אינו רואה ואינו שומר את המסמכים שלך.' },
+    { h: 'הפרטים שזוהו עלולים להיות שגויים', p: 'שולח, תאריכים, סכומים, קטגוריות וכפילויות מזוהים אוטומטית ועלולים לטעות. יש לבדוק תמיד את הדף המקורי לפני שמסתמכים על פרט כלשהו. האפליקציה אינה נותנת ייעוץ משפטי, מס או פיננסי, ואינה קובעת אם מסמך תקין או מה עליך לעשות.' },
+    { h: 'שמרו עותקים משלכם', p: 'הארכיונים נשמרים רק בדפדפן הזה בטלפון הזה. ניקוי נתוני הדפדפן, גלישה פרטית, הסרת הדפדפן או החלפת טלפון ימחקו אותם. יש לייצא באופן קבוע ולשמור את הקבצים במקום שאתם סומכים עליו. האחריות לגיבוי ולמקום שמירת הקבצים המיוצאים היא שלכם. יש לשמור את מסמכי הנייר המקוריים בכל מקום שבו הדבר נדרש.' },
+    { h: 'השימוש כמות שהוא', p: 'ארכיון נייר מסופק „כמות שהוא” (AS IS), ללא אחריות מכל סוג. במידה המרבית המותרת על פי דין, המפתח אינו אחראי לאובדן מידע או לכל נזק הנובע מהשימוש בו.' },
+  ],
+  ar: [
+    { h: 'مستنداتك تبقى على هذا الجهاز', p: 'يتم المسح وقراءة النص والفرز بالكامل داخل هذا المتصفح. لا يوجد حساب مستخدم ولا خادم. المطوّر لا يستلم مستنداتك ولا يطّلع عليها ولا يخزّنها.' },
+    { h: 'التفاصيل المكتشفة قد تكون خاطئة', p: 'المُرسِل والتواريخ والمبالغ والفئات والنسخ المكررة هي تقديرات تلقائية. تحقّق دائمًا من الصفحة الأصلية قبل الاعتماد على أي تفصيل. التطبيق لا يقدّم استشارة قانونية أو ضريبية أو مالية، ولا يحدد ما إذا كان المستند صحيحًا أو ما يجب عليك فعله.' },
+    { h: 'احتفظ بنسخك الخاصة', p: 'تُحفظ الأرشيفات فقط في هذا المتصفح على هذا الهاتف. مسح بيانات المتصفح أو استخدام نافذة خاصة أو حذف المتصفح أو تغيير الهاتف يؤدي إلى حذفها. صدّر بانتظام واحتفظ بالملفات في مكان تثق به. أنت المسؤول عن نسخك الاحتياطية وعن مكان حفظ الملفات المُصدَّرة. احتفظ بالمستندات الورقية الأصلية حيثما يُطلب منك ذلك.' },
+    { h: 'يُقدَّم كما هو', p: 'يُقدَّم «أرشيف الورق» «كما هو» دون أي ضمان من أي نوع. وإلى أقصى حد يسمح به القانون، لا يتحمّل المطوّر أي مسؤولية عن فقدان البيانات أو عن أي ضرر ناتج عن استخدامه.' },
+  ],
+};
 function AboutSheet({ onClose, onAccept }: any) {
-  const [lang, setLang] = useState('en');
+  const { lang, setLang } = React.useContext(LangCtx);
+  const blocks = TERMS[lang as Lang] || TERMS.en;
   return (
     <div className="sheet-wrap" onClick={onAccept ? undefined : onClose}>
-      <div className="sheet about-sheet" role="dialog" aria-label="About and terms" onClick={(e: any) => e.stopPropagation()}>
+      <div className="sheet about-sheet" role="dialog" aria-label={t('About and terms')} onClick={(e: any) => e.stopPropagation()}>
         <div className="sheet-head">
           <span className="privacy-icon"><Icon name="doc" size={20} /></span>
-          <h2>{lang === 'en' ? 'About Paper Archive' : 'אודות ארכיון נייר'}</h2>
-          <div className="lang-switch" role="group" aria-label="Language">
-            <button type="button" className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
-            <button type="button" className={lang === 'he' ? 'on' : ''} onClick={() => setLang('he')}>עב</button>
-          </div>
-          {!onAccept && <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button>}
+          <h2>{t('About Paper Archive')}</h2>
+          <LangMenu lang={lang} onChange={setLang} />
+          {!onAccept && <button className="icon-btn" onClick={onClose} type="button" aria-label={t('Close')}><Icon name="close" /></button>}
         </div>
-        {lang === 'en' ? (
-          <div className="terms" dir="ltr">
-            <section><h3>Your documents stay on this device</h3><p>Scanning, reading text and sorting all happen in this browser. There is no account and no server. The developer never receives, sees or stores your documents.</p></section>
-            <section><h3>Detected details can be wrong</h3><p>Sender, dates, amounts, categories and duplicates are automatic guesses. Always check the original page before relying on any detail. The app does not give legal, tax or financial advice, and does not tell you whether a document is correct or what you need to do.</p></section>
-            <section><h3>Keep your own copies</h3><p>Archives are stored only in this browser on this phone. Clearing browser data, using a private window, removing the browser or changing phones deletes them. Export regularly and keep the files somewhere you trust. You are responsible for your backups and for where you store exported files. Keep original paper documents wherever you are required to.</p></section>
-            <section><h3>Provided as is</h3><p>Paper Archive is provided “as is”, without warranty of any kind. To the extent permitted by law, the developer is not liable for any loss of data or any damage arising from using it.</p></section>
-          </div>
-        ) : (
-          <div className="terms" dir="rtl" lang="he">
-            <section><h3>המסמכים שלך נשארים במכשיר</h3><p>הסריקה, קריאת הטקסט והמיון מתבצעים כולם בדפדפן הזה. אין חשבון משתמש ואין שרת. המפתח אינו מקבל, אינו רואה ואינו שומר את המסמכים שלך.</p></section>
-            <section><h3>הפרטים שזוהו עלולים להיות שגויים</h3><p>שולח, תאריכים, סכומים, קטגוריות וכפילויות מזוהים אוטומטית ועלולים לטעות. יש לבדוק תמיד את הדף המקורי לפני שמסתמכים על פרט כלשהו. האפליקציה אינה נותנת ייעוץ משפטי, מס או פיננסי, ואינה קובעת אם מסמך תקין או מה עליך לעשות.</p></section>
-            <section><h3>שמרו עותקים משלכם</h3><p>הארכיונים נשמרים רק בדפדפן הזה בטלפון הזה. ניקוי נתוני הדפדפן, גלישה פרטית, הסרת הדפדפן או החלפת טלפון ימחקו אותם. יש לייצא באופן קבוע ולשמור את הקבצים במקום שאתם סומכים עליו. האחריות לגיבוי ולמקום שמירת הקבצים המיוצאים היא שלכם. יש לשמור את מסמכי הנייר המקוריים בכל מקום שבו הדבר נדרש.</p></section>
-            <section><h3>השימוש כמות שהוא</h3><p>ארכיון נייר מסופק „כמות שהוא” (AS IS), ללא אחריות מכל סוג. במידה המרבית המותרת על פי דין, המפתח אינו אחראי לאובדן מידע או לכל נזק הנובע מהשימוש בו.</p></section>
-          </div>
-        )}
+        <div className="terms">
+          {blocks.map((b) => <section key={b.h}><h3>{b.h}</h3><p>{b.p}</p></section>)}
+        </div>
         {onAccept && (
           <div className="cta-row end">
-            <button className="btn btn-primary" type="button" onClick={onAccept}>{lang === 'en' ? 'I understand' : 'הבנתי'}</button>
+            <button className="btn btn-primary" type="button" onClick={onAccept}>{t('I understand')}</button>
           </div>
         )}
       </div>
@@ -1755,27 +1769,27 @@ function PrivacySheet({ onClose, onDelete, hasArchive, onAbout }: any) {
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="sheet-wrap" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label="Privacy" onClick={(e: any) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-label={t("Privacy")} onClick={(e: any) => e.stopPropagation()}>
         <div className="sheet-head">
           <span className="privacy-icon"><Icon name="device" size={20} /></span>
-          <h2>Your documents stay on this device.</h2>
-          <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button>
+          <h2>{t("Your documents stay on this device.")}</h2>
+          <button className="icon-btn" onClick={onClose} type="button" aria-label={t("Close")}><Icon name="close" /></button>
         </div>
         <ul className="checks">
-          <li><Icon name="check" size={16} /> Camera frames are analyzed in this browser.</li>
-          <li><Icon name="check" size={16} /> Page images and extracted text are stored only here.</li>
-          <li><Icon name="check" size={16} /> No account and no sign-in. There is nothing to upload to.</li>
-          <li><Icon name="check" size={16} /> Exports are built on the device, even offline.</li>
-          <li><Icon name="check" size={16} /> The text reader is downloaded once from a public library server. Your pages are never sent anywhere.</li>
+          <li><Icon name="check" size={16} /> {t("Camera frames are analyzed in this browser.")}</li>
+          <li><Icon name="check" size={16} /> {t("Page images and extracted text are stored only here.")}</li>
+          <li><Icon name="check" size={16} /> {t("No account and no sign-in. There is nothing to upload to.")}</li>
+          <li><Icon name="check" size={16} /> {t("Exports are built on the device, even offline.")}</li>
+          <li><Icon name="check" size={16} /> {t("The text reader is downloaded once from a public library server. Your pages are never sent anywhere.")}</li>
         </ul>
-        <button className="link-btn" type="button" onClick={onAbout}>About &amp; terms</button>
+        <button className="link-btn" type="button" onClick={onAbout}>{t("About & terms")}</button>
         {hasArchive && (!confirm ? (
-          <button className="btn btn-quiet danger" onClick={() => setConfirm(true)} type="button"><Icon name="trash" size={16} /> Delete all archives from this device</button>
+          <button className="btn btn-quiet danger" onClick={() => setConfirm(true)} type="button"><Icon name="trash" size={16} /> {t("Delete all archives from this device")}</button>
         ) : (
           <div className="confirm">
-            <span>Delete every archive, page and text on this device? This can’t be undone.</span>
-            <button className="btn btn-quiet" onClick={() => setConfirm(false)} type="button">Cancel</button>
-            <button className="btn btn-danger" onClick={onDelete} type="button">Delete</button>
+            <span>{t("Delete every archive, page and text on this device? This can’t be undone.")}</span>
+            <button className="btn btn-quiet" onClick={() => setConfirm(false)} type="button">{t("Cancel")}</button>
+            <button className="btn btn-danger" onClick={onDelete} type="button">{t("Delete")}</button>
           </div>
         ))}
       </div>
@@ -1791,7 +1805,7 @@ function AddCategorySheet({ custom, assignTo, onClose, onSave, onRemove }: any) 
   const [words, setWords] = useState('');
   const [error, setError] = useState('');
   const taken = (n: string) => [...CATEGORIES, ...custom.map((c: CustomCat) => c.name)].some((x) => x.toLowerCase() === n.trim().toLowerCase());
-  const presets = CATEGORY_PRESETS.filter((p) => !taken(p.name));
+  const presets = CATEGORY_PRESETS.filter((p) => !taken(p.name) && !taken(t(p.name)));
   function submit(e: any) {
     e.preventDefault();
     const n = name.trim();
@@ -1802,41 +1816,41 @@ function AddCategorySheet({ custom, assignTo, onClose, onSave, onRemove }: any) 
   }
   return (
     <div className="sheet-wrap" onClick={onClose}>
-      <form className="sheet" role="dialog" aria-label="Add category" onClick={(e: any) => e.stopPropagation()} onSubmit={submit}>
+      <form className="sheet" role="dialog" aria-label={t("Add category")} onClick={(e: any) => e.stopPropagation()} onSubmit={submit}>
         <div className="sheet-head">
           <span className="privacy-icon cat-icon"><Icon name="tag" size={20} /></span>
-          <h2>{assignTo ? 'New category for this document' : 'Add a category'}</h2>
-          <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button>
+          <h2>{assignTo ? t("New category for this document") : t("Add a category")}</h2>
+          <button className="icon-btn" onClick={onClose} type="button" aria-label={t("Close")}><Icon name="close" /></button>
         </div>
         {presets.length > 0 && (
           <div className="presets">
-            <span>Start from</span>
+            <span>{t("Start from")}</span>
             {presets.map((p) => (
-              <button key={p.name} type="button" className="filter" onClick={() => { setName(p.name); setWords(p.keywords.join(', ')); setError(''); }}>{p.name}</button>
+              <button key={p.name} type="button" className="filter" onClick={() => { setName(t(p.name)); setWords(p.keywords.join(', ')); setError(''); }}>{t(p.name)}</button>
             ))}
           </div>
         )}
         <label className="field" htmlFor="cat-name">
-          <span>Name</span>
-          <input id="cat-name" value={name} onChange={(e: any) => { setName(e.target.value); setError(''); }} placeholder="e.g. Store receipts or קבלות" dir="auto" autoComplete="off" />
+          <span>{t("Name")}</span>
+          <input id="cat-name" value={name} onChange={(e: any) => { setName(e.target.value); setError(''); }} placeholder={t("e.g. Store receipts or קבלות")} dir="auto" autoComplete="off" />
         </label>
         <label className="field" htmlFor="cat-words">
-          <span>Words that identify it <small>optional, separated by commas</small></span>
+          <span>{t("Words that identify it")} <small>{t("optional, separated by commas")}</small></span>
           <textarea id="cat-words" value={words} onChange={(e: any) => setWords(e.target.value)} rows={3} placeholder="קבלה, שופרסל, רמי לוי" dir="auto" />
-          <small className="hint">Pages whose text contains any of these words are filed here automatically, now and in future sessions.</small>
+          <small className="hint">{t("Pages whose text contains any of these words are filed here automatically, now and in future sessions.")}</small>
         </label>
         {error && <p className="form-error">{error}</p>}
         <div className="cta-row end">
-          <button className="btn btn-quiet" onClick={onClose} type="button">Cancel</button>
-          <button className="btn btn-primary" type="submit">Add category</button>
+          <button className="btn btn-quiet" onClick={onClose} type="button">{t("Cancel")}</button>
+          <button className="btn btn-primary" type="submit">{t("Add category")}</button>
         </div>
         {custom.length > 0 && !assignTo && (
           <div className="your-cats">
-            <h3>Your categories</h3>
+            <h3>{t("Your categories")}</h3>
             {custom.map((c: CustomCat) => (
               <div className="your-cat" key={c.name}>
-                <div><strong dir="auto">{c.name}</strong><small dir="auto">{c.keywords.length ? c.keywords.join(', ') : 'No words, filed by hand only'}</small></div>
-                <button type="button" className="icon-btn" aria-label={`Remove ${c.name}`} onClick={() => onRemove(c.name)}><Icon name="trash" size={16} /></button>
+                <div><strong dir="auto">{c.name}</strong><small dir="auto">{c.keywords.length ? c.keywords.join(', ') : t("No words, filed by hand only")}</small></div>
+                <button type="button" className="icon-btn" aria-label={t("Remove {0}", { 0: c.name })} onClick={() => onRemove(c.name)}><Icon name="trash" size={16} /></button>
               </div>
             ))}
           </div>
@@ -1853,6 +1867,10 @@ function loadCustomCats(): CustomCat[] {
 type Screen = 'home' | 'how' | 'setup' | 'camera' | 'processing' | 'archive';
 
 function App() {
+  const [lang, setLangState] = useState(LANG as Lang);
+  const [langChosen, setLangChosen] = useState(hasChosenLang());
+  const setLang = (l: Lang) => { applyLang(l); setLangState(l); };
+  const langValue = useMemo(() => ({ lang, setLang }), [lang]);
   const [screen, setScreen] = useState('home' as Screen);
   const [stream, setStream] = useState(null as any);
   const [captured, setCaptured] = useState([] as PageImage[]);
@@ -1911,7 +1929,7 @@ function App() {
         const now = Date.now();
         const m: SessionMeta = { id: `s${now.toString(36)}`, name: defaultSessionName(now), createdAt: now, updatedAt: now, pageKeys: [], docs: [], cover: [], processed: [] } as any;
         setCurrent(m);
-        try { await store.putSession(m); askPersistentStorage(); } catch { toast('This browser won’t keep archives, so this one lasts until you close the page.'); }
+        try { await store.putSession(m); askPersistentStorage(); } catch { toast(t("This browser won’t keep archives, so this one lasts until you close the page.")); }
         return m;
       })();
       creating.current.finally(() => { creating.current = null; });
@@ -1943,7 +1961,7 @@ function App() {
 
   async function loadSession(id: string) {
     const meta = await store.getSession(id);
-    if (!meta) { toast('That archive is no longer on this device.'); refreshSessions(); return null; }
+    if (!meta) { toast(t("That archive is no longer on this device.")); refreshSessions(); return null; }
     const pages = await store.getPages(id);
     primeReadCache(pages);
     const map = new Map(pages.map((p) => [p.key, p] as [string, StoredPage]));
@@ -1991,7 +2009,7 @@ function App() {
     });
     // Show the new scan straight away
     setDocs((ds: ArchiveDoc[]) => ds.map((d) => (d.id === target.docId ? placePages(d, target.mode, target.index, ps.map((p) => entry(p))) : d)));
-    toast(target.mode === 'retake' ? 'Page retaken. Reading its text…' : `Added ${plural(ps.length, 'page')}. Reading the text…`);
+    toast(target.mode === 'retake' ? t("Page retaken. Reading its text…") : t("Added {0}. Reading the text…", { 0: plural(ps.length, 'page') }));
     const cur = currentRef.current;
     if (cur) {
       const processed = Array.from(new Set([...((cur as any).processed || []), ...ps.map((p) => p.key)]));
@@ -2010,7 +2028,7 @@ function App() {
       next.ocr = (next.pageTexts as string[][]).flat().filter(Boolean);
       return hadText ? next : resortDocument(next);
     }));
-    toast(target.mode === 'retake' ? 'New page is ready' : 'Pages added');
+    toast(target.mode === 'retake' ? t("New page is ready") : t("Pages added"));
   }
 
   function samplePages(): PageImage[] {
@@ -2026,9 +2044,9 @@ function App() {
       let inFrame = false;
       try { inFrame = window.self !== window.top; } catch { inFrame = true; }
       if (!window.isSecureContext) {
-        toast('The camera only works on an https:// address.' + fallback);
+        toast(t("The camera only works on an https:// address.") + fallback);
       } else if (!navigator.mediaDevices?.getUserMedia) {
-        toast('This browser doesn’t allow camera access here. Open the page directly in Safari or Chrome.' + fallback);
+        toast(t("This browser doesn’t allow camera access here. Open the page directly in Safari or Chrome.") + fallback);
       } else {
         try {
           const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
@@ -2036,11 +2054,11 @@ function App() {
           return true;
         } catch (err: any) {
           const name = err?.name || '';
-          if (inFrame && (name === 'NotAllowedError' || name === 'SecurityError')) toast('Claude’s viewer blocks the camera. Open a hosted copy of this page to use it.' + fallback);
-          else if (name === 'NotAllowedError') toast('Camera access was declined. Allow it in your browser’s site settings, then try again.' + fallback);
-          else if (name === 'NotFoundError' || name === 'OverconstrainedError') toast('No camera was found on this device.' + fallback);
-          else if (name === 'NotReadableError') toast('Another app is using the camera. Close it and try again.' + fallback);
-          else toast(`The camera couldn’t start (${name || 'unknown error'}).` + fallback);
+          if (inFrame && (name === 'NotAllowedError' || name === 'SecurityError')) toast(t("Claude’s viewer blocks the camera. Open a hosted copy of this page to use it.") + fallback);
+          else if (name === 'NotAllowedError') toast(t("Camera access was declined. Allow it in your browser’s site settings, then try again.") + fallback);
+          else if (name === 'NotFoundError' || name === 'OverconstrainedError') toast(t("No camera was found on this device.") + fallback);
+          else if (name === 'NotReadableError') toast(t("Another app is using the camera. Close it and try again.") + fallback);
+          else toast(t("The camera couldn’t start ({0}).", { 0: name || 'unknown error' }) + fallback);
         }
       }
       if (strict) return false;
@@ -2076,7 +2094,7 @@ function App() {
   async function deleteSession(id: string) {
     try { await store.deleteSession(id); } catch { /* ignore */ }
     if (currentRef.current?.id === id) { setCurrent(null); setDocs([]); setDocsOwner(null); }
-    refreshSessions(); toast('Archive deleted from this device');
+    refreshSessions(); toast(t("Archive deleted from this device"));
   }
   async function renameSession(id: string, name: string) {
     try { const m = await store.getSession(id); if (m) await store.putSession({ ...m, name, updatedAt: Date.now() }); } catch { /* ignore */ }
@@ -2095,7 +2113,7 @@ function App() {
       else await saveMeta({ pageKeys, cover: cur.cover.slice(0, Math.min(cur.cover.length, pageKeys.length)) });
     }
     setCameraInitial([]); setSessionKey((k: number) => k + 1);
-    toast('Started over. Place the first document.');
+    toast(t("Started over. Place the first document."));
   }
 
   // Remember what went into an export, so next time only new documents are added
@@ -2127,12 +2145,12 @@ function App() {
       if (assignTo) out = out.map((d) => (d.id === assignTo && d.category !== cat.name ? { ...d, category: cat.name, review: d.review === 'unclear' ? undefined : d.review } : d));
       return out;
     });
-    setTimeout(() => toast(assignTo ? `Filed under ${cat.name}` : moved ? `Added ${cat.name}. Moved ${plural(moved, 'document')} there.` : `Added ${cat.name}`), 0);
+    setTimeout(() => toast(assignTo ? t("Filed under {0}", { 0: cat.name }) : moved ? t("Added {0}. Moved {1} there.", { 0: cat.name, 1: plural(moved, 'document') }) : t("Added {0}", { 0: cat.name })), 0);
   }
   function removeCategory(name: string) {
     setCustom((cs: CustomCat[]) => cs.filter((c) => c.name !== name));
     setDocs((list: ArchiveDoc[]) => list.map((d) => (d.category === name ? { ...d, category: 'Other' } : d)));
-    toast(`Removed ${name}. Its documents moved to Other.`);
+    toast(t("Removed {0}. Its documents moved to Other.", { 0: name }));
   }
 
   const openPrivacy = () => setPrivacy(true);
@@ -2141,7 +2159,9 @@ function App() {
       onFinish={finishSession} onDelete={deleteSession} onRename={renameSession} onNew={startNewArchive} onExport={() => setLibExport(true)} />
   );
 
+  if (!langChosen) return <LanguageChooser onPick={(l: Lang) => { setLang(l); setLangChosen(true); }} />;
   return (
+    <LangCtx.Provider value={langValue}>
     <CatsCtx.Provider value={catsValue}>
       {screen === 'home' && <HomeScreen onStart={startNewArchive} onAbout={() => setAbout({})} onHow={() => go('how')} openPrivacy={openPrivacy}
         onSample={openSample} sessionList={sessionList} hasSessions={sessions.length > 0} />}
@@ -2188,5 +2208,6 @@ function App() {
       {addCat && <AddCategorySheet custom={custom} assignTo={addCat.assignTo} onClose={() => setAddCat(null)} onSave={saveCategory} onRemove={removeCategory} />}
       <div className={`toast ${toastMsg ? 'show' : ''}`} role="status" aria-live="polite">{toastMsg}</div>
     </CatsCtx.Provider>
+    </LangCtx.Provider>
   );
 }

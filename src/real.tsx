@@ -1001,9 +1001,9 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
     <div className="cam">
       <header className="cam-top">
         <div className="cam-left">
-          {!target && <button className="btn btn-cam btn-sm" onClick={() => { setRunning(false); setConfirm(true); }} type="button"><Icon name="restart" size={15} /> Start over</button>}
+          {!target && <button className="btn btn-cam btn-sm" onClick={() => { setRunning(false); setConfirm(true); }} type="button"><Icon name="restart" size={15} /> {t("Start over")}</button>}
         </div>
-        <div className="cam-title"><span className={`rec ${running ? '' : 'off'}`} /> {running ? 'Archiving' : 'Paused'} <span className="cam-time">{mm}:{ss}</span></div>
+        <div className="cam-title"><span className={`rec ${running ? '' : 'off'}`} /> {running ? t("Archiving") : t("Paused")} <span className="cam-time">{mm}:{ss}</span></div>
         <LocalPill onClick={openPrivacy} label="Local processing" dark />
       </header>
 
@@ -1023,24 +1023,24 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
             )}
             {phase === 'focusing' && <span className="focus-dot" aria-hidden="true" />}
             {(phase === 'captured' || phase === 'same') && <Icon name="check" size={14} />}
-            <span>{(phase === 'captured' || phase === 'same') && lastBlurry ? 'Captured, a little soft. Keep it still for a sharper copy' : REAL_STATUS[phase as RealPhase]}</span>
+            <span>{(phase === 'captured' || phase === 'same') && lastBlurry ? t("Captured, a little soft. Keep it still for a sharper copy") : t(REAL_STATUS[phase as RealPhase])}</span>
           </div>
           {confirm && (
             <div className="paused">
-              <strong>Start over?</strong>
-              <span>{pages.length ? `The ${plural(pages.length, 'page')} not yet sorted will be discarded. Documents already in this archive stay.` : 'Nothing has been captured yet.'}</span>
+              <strong>{t("Start over?")}</strong>
+              <span>{pages.length ? t("The {0} not yet sorted will be discarded. Documents already in this archive stay.", { 0: plural(pages.length, 'page') }) : t("Nothing has been captured yet.")}</span>
               <div className="cta-row center">
-                <button className="btn btn-cam" onClick={() => { setConfirm(false); setRunning(true); }} type="button">Keep going</button>
-                <button className="btn btn-light" onClick={onRestart} type="button"><Icon name="restart" size={16} /> Start over</button>
+                <button className="btn btn-cam" onClick={() => { setConfirm(false); setRunning(true); }} type="button">{t("Keep going")}</button>
+                <button className="btn btn-light" onClick={onRestart} type="button"><Icon name="restart" size={16} /> {t("Start over")}</button>
               </div>
-              <button className="link-cam" onClick={onExit} type="button">Leave for now. Your pages are saved</button>
+              <button className="link-cam" onClick={onExit} type="button">{t("Leave for now. Your pages are saved")}</button>
             </div>
           )}
           {!running && !confirm && (
             <div className="paused">
-              <strong>Paused</strong>
-              <span>Captured pages are kept on this device.</span>
-              <button className="btn btn-light" onClick={() => setRunning(true)} type="button"><Icon name="play" size={16} /> Resume</button>
+              <strong>{t("Paused")}</strong>
+              <span>{t("Captured pages are kept on this device.")}</span>
+              <button className="btn btn-light" onClick={() => setRunning(true)} type="button"><Icon name="play" size={16} /> {t("Resume")}</button>
             </div>
           )}
         </div>
@@ -1049,28 +1049,28 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
       <footer className="cam-bottom">
         <div className="cam-stats">
           <div className="counts">
-            <span className="big">{plural(pages.length, 'page')}</span><span className="dot">·</span><span className="sub">{pages.length ? `${pages.filter((p) => readKeys.has(p.key)).length} read so far` : 'read while you work'}</span>
+            <span className="big">{plural(pages.length, 'page')}</span><span className="dot">·</span><span className="sub">{pages.length ? t("{0} read so far", { 0: pages.filter((p) => readKeys.has(p.key)).length }) : t("read while you work")}</span>
           </div>
-          <ol className="capture-steps" aria-label="Current page">
-            {steps.map((x, i) => <li key={x} className={i < activeStep ? 'past' : i === activeStep ? 'now' : ''}>{x}</li>)}
+          <ol className="capture-steps" aria-label={t("Current page")}>
+            {steps.map((x, i) => <li key={x} className={i < activeStep ? 'past' : i === activeStep ? 'now' : ''}>{t(x)}</li>)}
           </ol>
         </div>
 
-        <div className="strip" ref={stripRef} aria-label="Captured pages">
-          {target && pages.length === initialPages.length && !showHelp && <span className="strip-empty target-note">{target.mode === 'retake' ? `Retaking page ${target.index + 1} of “${target.title}”. Lay the page down and hold still.` : `Adding pages to “${target.title}”. Lay each page down, then tap Done.`}</span>}
-          {!target && pages.length === 0 && !showHelp && <span className="strip-empty">No buttons to press. Lay a document down and let go.</span>}
-          {dupKeys.size > 0 && pages.length > 0 && dupKeys.has(pages[pages.length - 1].key) && <span className="strip-empty dup-note">That page was already scanned. It will be marked as a possible duplicate.</span>}
-          {initialPages.length > 0 && pages.length === initialPages.length && !showHelp && <span className="strip-empty">Continuing {sessionName ? `“${sessionName}”` : 'your archive'}. Place the next document.</span>}
+        <div className="strip" ref={stripRef} aria-label={t("Captured pages")}>
+          {target && pages.length === initialPages.length && !showHelp && <span className="strip-empty target-note">{target.mode === 'retake' ? t("Retaking page {0} of “{1}”. Lay the page down and hold still.", { 0: target.index + 1, 1: target.title }) : t("Adding pages to “{0}”. Lay each page down, then tap Done.", { 0: target.title })}</span>}
+          {!target && pages.length === 0 && !showHelp && <span className="strip-empty">{t("No buttons to press. Lay a document down and let go.")}</span>}
+          {dupKeys.size > 0 && pages.length > 0 && dupKeys.has(pages[pages.length - 1].key) && <span className="strip-empty dup-note">{t("That page was already scanned. It will be marked as a possible duplicate.")}</span>}
+          {initialPages.length > 0 && pages.length === initialPages.length && !showHelp && <span className="strip-empty">{sessionName ? t("Continuing “{0}”. Place the next document.", { 0: sessionName }) : t("Continuing your archive. Place the next document.")}</span>}
           {showHelp && (
             <span className="help-row">
-              Not detecting? A table darker than the paper works best.
-              <button className="link-cam" onClick={captureWholeView} type="button">Capture the view now</button>
+              {t("Not detecting? A table darker than the paper works best.")}
+              <button className="link-cam" onClick={captureWholeView} type="button">{t("Capture the view now")}</button>
             </span>
           )}
           {pages.map((p, i) => (
             <div key={p.key} className={`strip-item ${i === pages.length - 1 ? 'is-new' : ''}`}>
-              <img className="strip-img" src={p.thumb} alt={`Captured page ${i + 1}`} />
-              {dupKeys.has(p.key) && <span className="dup-mark" title="Looks like a page you already scanned">2×</span>}
+              <img className="strip-img" src={p.thumb} alt={t("Captured page {0}", { 0: i + 1 })} />
+              {dupKeys.has(p.key) && <span className="dup-mark" title={t("Looks like a page you already scanned")}>2×</span>}
               <span className={`read-mark ${readKeys.has(p.key) ? 'done' : ''}`} title={readKeys.has(p.key) ? 'Text read' : 'Reading text…'}>
                 {readKeys.has(p.key) ? <Icon name="check" size={10} /> : <span className="mini-spin" />}
               </span>
@@ -1080,17 +1080,17 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
 
         <div className="cam-actions">
           <button className="btn btn-cam" onClick={() => setRunning(!running)} type="button">
-            <Icon name={running ? 'pause' : 'play'} size={16} /> {running ? 'Pause' : 'Resume'}
+            <Icon name={running ? 'pause' : 'play'} size={16} /> {running ? t("Pause") : t("Resume")}
           </button>
           {hasTorch && (
             <button className={`btn btn-cam ${torch ? 'is-on' : ''}`} onClick={toggleTorch} type="button" aria-pressed={torch}>
-              <Icon name="bolt" size={16} /> Light
+              <Icon name="bolt" size={16} /> {t("Light")}
             </button>
           )}
           {target ? (
-            <button className="btn btn-light" onClick={() => { finished.current = true; onFinish(pages.slice(initialPages.length)); }} type="button">{target.mode === 'retake' ? 'Cancel' : 'Done'}</button>
+            <button className="btn btn-light" onClick={() => { finished.current = true; onFinish(pages.slice(initialPages.length)); }} type="button">{target.mode === 'retake' ? t("Cancel") : t("Done")}</button>
           ) : (
-            <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">Finish archive</button>
+            <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">{t("Finish archive")}</button>
           )}
         </div>
       </footer>
@@ -1116,7 +1116,7 @@ function RealProcessingScreen({ pages, onView, openPrivacy, existing = [] }: any
         const out = await readPage(pages[i]);
         if (!live) return;
         anyOk = anyOk || out.ok;
-        if (!out.ok) setNote('Text reader unavailable, pages kept as images');
+        if (!out.ok) setNote(t("Text reader unavailable, pages kept as images"));
         texts.push(out.lines); setOcrCount(i + 1);
       }
       setStep(3);
@@ -1134,25 +1134,25 @@ function RealProcessingScreen({ pages, onView, openPrivacy, existing = [] }: any
   const cats = new Set(docs.map((d) => d.category)).size;
   const review = docs.filter((d) => d.review).length;
   const stages = [
-    ['Documents detected', plural(pages.length, 'page') + ' captured'],
+    ['Documents detected', t('{0} captured', { 0: plural(pages.length, 'page') })],
     ['Pages separated', plural(pages.length, 'page')],
-    ['Text extracted', note || `${ocrCount} of ${pages.length} pages`],
+    ['Text extracted', note || t('{0} of {1} pages', { 0: ocrCount, 1: pages.length })],
     ['Documents classified', result ? plural(cats, 'category', 'categories') : '…'],
     ['Duplicates checked', result ? plural(result.dupes, 'possible duplicate') : '…'],
-    ['Archive created', 'Saved on this device'],
+    ['Archive created', t('Saved on this device')],
   ];
 
   return (
     <div className="page">
       <AppHeader onHome={() => {}} openPrivacy={openPrivacy} />
       <main className="narrow processing">
-        <h1 className="h-page">{result ? 'Your archive is ready' : 'Building your archive'}</h1>
-        {!result && <p className="muted">Reading your pages on this device. The text reader is downloaded once; your pages are never uploaded.</p>}
+        <h1 className="h-page">{result ? t("Your archive is ready") : t("Building your archive")}</h1>
+        {!result && <p className="muted">{t("Reading your pages on this device. The text reader is downloaded once; your pages are never uploaded.")}</p>}
         <ol className="stages">
           {stages.map(([label, detail], i) => (
             <li key={label} className={i < step ? 'done' : i === step ? 'now' : ''}>
               <span className="stage-mark">{i < step ? <Icon name="check" size={14} /> : i === step ? <span className="spin" /> : null}</span>
-              <span className="stage-label">{label}</span>
+              <span className="stage-label">{t(label)}</span>
               <span className="stage-detail">{i <= step ? detail : ''}</span>
             </li>
           ))}
@@ -1160,16 +1160,16 @@ function RealProcessingScreen({ pages, onView, openPrivacy, existing = [] }: any
         {result && (
           <>
             <dl className="summary">
-              <div><dt>Documents</dt><dd>{docs.length}</dd></div>
-              <div><dt>Pages</dt><dd>{pages.length}</dd></div>
-              <div><dt>Categories</dt><dd>{cats}</dd></div>
-              <div><dt>Possible duplicates</dt><dd>{result.dupes}</dd></div>
-              <div className={review ? 'warn' : ''}><dt>Need review</dt><dd>{review}</dd></div>
+              <div><dt>{t("Documents")}</dt><dd>{docs.length}</dd></div>
+              <div><dt>{t("Pages")}</dt><dd>{pages.length}</dd></div>
+              <div><dt>{t("Categories")}</dt><dd>{cats}</dd></div>
+              <div><dt>{t("Possible duplicates")}</dt><dd>{result.dupes}</dd></div>
+              <div className={review ? 'warn' : ''}><dt>{t("Need review")}</dt><dd>{review}</dd></div>
             </dl>
             <div className="cta-row">
-              <button className="btn btn-primary btn-lg" onClick={() => onView(docs)} type="button">View archive</button>
+              <button className="btn btn-primary btn-lg" onClick={() => onView(docs)} type="button">{t("View archive")}</button>
             </div>
-            <p className="fine"><Icon name="lock" size={13} /> 0 bytes of your documents uploaded. Every step ran in this browser.</p>
+            <p className="fine"><Icon name="lock" size={13} /> {t("0 bytes of your documents uploaded. Every step ran in this browser.")}</p>
           </>
         )}
       </main>

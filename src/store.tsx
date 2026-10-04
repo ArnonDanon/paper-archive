@@ -104,9 +104,9 @@ const toRealPage = (p: StoredPage): RealPage => {
   const { sessionId, ocr, pdf, ...rest } = p as any;
   return rest as RealPage;
 };
-const defaultSessionName = (t = Date.now()) => {
-  const d = new Date(t);
-  return `Archive · ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${clock(t)}`;
+const defaultSessionName = (at = Date.now()) => {
+  const d = new Date(at);
+  return `${t('Archive')} · ${d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}, ${clock(at)}`;
 };
 const fmtBytes = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : b < 1024 ** 3 ? `${Math.round(b / 1024 / 1024)} MB` : `${(b / 1024 ** 3).toFixed(1)} GB`);
 
@@ -130,24 +130,24 @@ function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDele
   const [editName, setEditName] = useState('');
   if (!sessions.length) return null;
   return (
-    <section className="sessions" aria-label="Your archives">
+    <section className="sessions" aria-label={t("Your archives")}>
       <div className="sessions-head">
         <div>
-          <h2 className="h-section">Your archives</h2>
-          <span className="fine"><Icon name="lock" size={13} /> Saved on this device{usage ? ` · ${usage}` : ''}</span>
+          <h2 className="h-section">{t("Your archives")}</h2>
+          <span className="fine"><Icon name="lock" size={13} /> {t("Saved on this device")}{usage ? ` · ${usage}` : ''}</span>
         </div>
         <div className="sessions-btns">
-          {sessions.some((s: SessionMeta) => s.docs.length) && <button className="btn btn-quiet btn-sm" type="button" onClick={onExport}><Icon name="download" size={15} /> Export</button>}
-          <button className="btn btn-quiet btn-sm" type="button" onClick={onNew}><Icon name="plus" size={15} /> New archive</button>
+          {sessions.some((s: SessionMeta) => s.docs.length) && <button className="btn btn-quiet btn-sm" type="button" onClick={onExport}><Icon name="download" size={15} /> {t("Export")}</button>}
+          <button className="btn btn-quiet btn-sm" type="button" onClick={onNew}><Icon name="plus" size={15} /> {t("New archive")}</button>
         </div>
       </div>
       {notExported > 0 && !snoozed && (
         <div className="backup-note" role="status">
           <Icon name="alert" size={16} />
-          <span><strong>{plural(notExported, 'document')} {notExported === 1 ? 'isn’t' : 'aren’t'} exported yet.</strong> They live only in this browser. Export to keep your own copy.</span>
+          <span><strong>{notExported === 1 ? t("1 document isn’t exported yet.") : t("{0} documents aren’t exported yet.", { 0: notExported })}</strong> {t("They live only in this browser. Export to keep your own copy.")}</span>
           <div className="backup-actions">
-            <button className="btn btn-primary btn-sm" type="button" onClick={onExport}>Export</button>
-            <button className="btn btn-quiet btn-sm" type="button" onClick={snooze}>Later</button>
+            <button className="btn btn-primary btn-sm" type="button" onClick={onExport}>{t("Export")}</button>
+            <button className="btn btn-quiet btn-sm" type="button" onClick={snooze}>{t("Later")}</button>
           </div>
         </div>
       )}
@@ -164,41 +164,41 @@ function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDele
               <div className="session-main">
                 {editId === s.id ? (
                   <form className="rename" onSubmit={(e: any) => { e.preventDefault(); onRename(s.id, editName.trim() || s.name); setEditId(''); }}>
-                    <input id={`rename-${s.id}`} value={editName} onChange={(e: any) => setEditName(e.target.value)} autoFocus dir="auto" aria-label="Archive name" />
-                    <button className="btn btn-quiet btn-sm" type="submit">Save</button>
+                    <input id={`rename-${s.id}`} value={editName} onChange={(e: any) => setEditName(e.target.value)} autoFocus dir="auto" aria-label={t("Archive name")} />
+                    <button className="btn btn-quiet btn-sm" type="submit">{t("Save")}</button>
                   </form>
                 ) : (
-                  <button className="session-name" type="button" onClick={() => { setEditId(s.id); setEditName(s.name); }} title="Rename">
+                  <button className="session-name" type="button" onClick={() => { setEditId(s.id); setEditName(s.name); }} title={t("Rename")}>
                     <span dir="auto">{s.name}</span><Icon name="pencil" size={13} />
                   </button>
                 )}
                 <span className="session-meta num">
                   {s.docs.length ? `${plural(s.docs.length, 'document')} · ` : ''}{plural(s.docs.reduce((n, d) => n + (d.pageKeys || []).length, 0) + pending, 'page')}
-                  {review ? ` · ${review} to review` : ''}
+                  {review ? t(" · {0} to review", { 0: review }) : ''}
                 </span>
-                {pending > 0 && <span className="pill-warn session-pill">{plural(pending, 'page')} not sorted yet</span>}
-                <span className="session-date">Last changed {new Date(s.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, {clock(s.updatedAt)}</span>
+                {pending > 0 && <span className="pill-warn session-pill">{t("{0} not sorted yet", { 0: plural(pending, 'page') })}</span>}
+                <span className="session-date">{t("Last changed")} {new Date(s.updatedAt).toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}, {clock(s.updatedAt)}</span>
               </div>
               {confirmId === s.id ? (
                 <div className="session-actions confirm-row">
-                  <span>Delete this archive and its {plural(s.pageKeys.length, 'page')}?</span>
-                  <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmId('')}>Cancel</button>
-                  <button className="btn btn-danger btn-sm" type="button" onClick={() => { setConfirmId(''); onDelete(s.id); }}>Delete</button>
+                  <span>{t("Delete this archive and its {0}?", { 0: plural(s.pageKeys.length, 'page') })}</span>
+                  <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmId('')}>{t("Cancel")}</button>
+                  <button className="btn btn-danger btn-sm" type="button" onClick={() => { setConfirmId(''); onDelete(s.id); }}>{t("Delete")}</button>
                 </div>
               ) : (
                 <div className="session-actions">
                   {pending > 0 ? (
                     <>
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => onContinue(s.id)}><Icon name="camera" size={15} /> Continue capturing</button>
-                      <button className="btn btn-quiet btn-sm" type="button" onClick={() => onFinish(s.id)}>Finish and sort</button>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => onContinue(s.id)}><Icon name="camera" size={15} /> {t("Continue capturing")}</button>
+                      <button className="btn btn-quiet btn-sm" type="button" onClick={() => onFinish(s.id)}>{t("Finish and sort")}</button>
                     </>
                   ) : (
                     <>
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => onOpen(s.id)}>Open</button>
-                      <button className="btn btn-quiet btn-sm" type="button" onClick={() => onAddMore(s.id)}><Icon name="camera" size={15} /> Add pages</button>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => onOpen(s.id)}>{t("Open")}</button>
+                      <button className="btn btn-quiet btn-sm" type="button" onClick={() => onAddMore(s.id)}><Icon name="camera" size={15} /> {t("Add pages")}</button>
                     </>
                   )}
-                  <button className="icon-btn" type="button" aria-label={`Delete ${s.name}`} onClick={() => setConfirmId(s.id)}><Icon name="trash" size={16} /></button>
+                  <button className="icon-btn" type="button" aria-label={t("Delete {0}", { 0: s.name })} onClick={() => setConfirmId(s.id)}><Icon name="trash" size={16} /></button>
                 </div>
               )}
             </article>
