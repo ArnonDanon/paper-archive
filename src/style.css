@@ -536,3 +536,18 @@ mark{background:color-mix(in srgb, var(--warn) 28%, transparent); color:inherit;
 .edit-form{display:grid; gap:12px; margin-top:20px; padding:16px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface)}
 .edit-btn{margin-top:10px}
 .link-btn{background:none; border:0; padding:0; color:var(--accent); font-size:13.5px; text-decoration:underline; text-underline-offset:3px}
+
+.sessions-btns{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end}
+.lib-sheet{gap:14px}
+.lib-intro{font-size:14px}
+.lib-list{border:0; padding:0; margin:0; display:grid; gap:6px; max-height:34vh; overflow-y:auto}
+.lib-list legend{font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px}
+.lib-list label{display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--line); border-radius:10px; cursor:pointer}
+.lib-list label.on{border-color:var(--accent)}
+.lib-list label > span{display:grid; min-width:0}
+.lib-list small{color:var(--muted); font-size:12.5px}
+.lib-list input,.lib-opts input{accent-color:var(--accent); margin-top:3px}
+.lib-opts{display:grid; gap:8px; font-size:14px}
+.lib-opts label{display:flex; gap:8px; align-items:flex-start}
+.lib-opts small{color:var(--muted)}
+.lib-sheet .ready{color:var(--local); display:flex; gap:6px; align-items:center; font-size:13.5px}

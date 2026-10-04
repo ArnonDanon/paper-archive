@@ -51,6 +51,8 @@ interface ArchiveDoc {
   pageTexts?: string[][];
   sources?: ({ from: 'photo' | 'video'; size?: [number, number] } | null)[];
   edited?: string[];   // fields the person set by hand
+  exportedAt?: number; // when it was last included in a library export
+  exportPath?: string; // its file's path in the exported folder, kept the same every time
 }
 
 const CATEGORIES: Category[] = ['Bills', 'Insurance', 'Bank', 'Government', 'Other'];
@@ -1018,6 +1020,32 @@ function ReviewTab({ docs, resolveDuplicate, resolveUnclear, onOpen, deleteDoc }
 const isoDate = (d: string) => { const m = d.match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : 'no-date'; };
 const safeName = (t: string) => t.replace(/[\\/:*?"<>|\u0000-\u001F]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
 const fileBase = (d: ArchiveDoc) => safeName(`${isoDate(d.date)} ${d.sender === 'Unknown' ? '' : d.sender + ' - '}${d.title}`) || d.id;
+/** Folder layout shared by every export: Category / Year / file. Stable, so exports merge into one Drive folder. */
+const yearOf = (d: ArchiveDoc) => ((d.date || '').match(/(\d{4})$/) || [])[1] || 'No date';
+const folderFor = (d: ArchiveDoc) => `${safeName(d.category) || 'Other'}/${yearOf(d)}/`;
+interface IndexRow { d: ArchiveDoc; archive: string; path: string }
+function buildIndexCsv(rows: IndexRow[]): string {
+  const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = 'id,archive,title,sender,date,date_iso,category,amount,amount_value,pages,needs_review,captured,file';
+  const body = rows.map(({ d, archive, path }) => [
+    d.id, archive, d.title, d.sender === 'Unknown' ? '' : d.sender, d.date || '', d.date ? isoDate(d.date) : '', d.category,
+    d.amount || '', (d.amount || '').replace(/[^\d.]/g, ''), d.pages, d.review ? 'yes' : 'no', d.capturedAt || '', path,
+  ].map(esc).join(','));
+  return [head, ...body].join('\r\n');
+}
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const el = document.createElement('a'); el.href = url; el.download = name; document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+async function shareBlob(blob: Blob, name: string): Promise<boolean> {
+  try { await (navigator as any).share({ files: [new File([blob], name, { type: blob.type })], title: name }); return true; }
+  catch (e: any) { if (e?.name !== 'AbortError') throw e; return false; }
+}
+function canShareBlob(b?: Blob, n?: string) {
+  try { return !!b && !!(navigator as any).canShare?.({ files: [new File([b], n || 'f', { type: b.type })] }); } catch { return false; }
+}
+const downloadsPlace = () => { const ua = navigator.userAgent; return /iPhone|iPad|iPod/.test(ua) ? 'Files app › Downloads' : /Android/.test(ua) ? 'Downloads folder (Files app)' : 'Downloads folder'; };
 function dataUrlBytes(u: string): Uint8Array {
   const b = atob(u.slice(u.indexOf(',') + 1)); const out = new Uint8Array(b.length);
   for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
@@ -1076,7 +1104,7 @@ async function documentPdf(d: ArchiveDoc, searchable: boolean): Promise<Uint8Arr
   return out.save();
 }
 
-function ExportTab({ docs, toast }: any) {
+function ExportTab({ docs, toast, archiveName }: any) {
   const pages = docs.reduce((n: number, d: ArchiveDoc) => n + d.pages, 0);
   const scanned = docs.filter((d: ArchiveDoc) => d.images?.length);
   const [state, setState] = useState({} as Record<string, { status: string; progress: number; blob?: Blob; name?: string; error?: string }>);
@@ -1090,12 +1118,12 @@ function ExportTab({ docs, toast }: any) {
     { id: 'docs', icon: 'doc', title: 'Download documents', desc: `${plural(scanned.length, 'PDF')} in one ZIP, named by date and sender`, needsScans: true },
     { id: 'pdf', icon: 'layers', title: 'Download searchable PDF', desc: `One file, ${plural(scanned.reduce((n: number, d: ArchiveDoc) => n + d.pages, 0), 'page')}, text you can search and copy`, needsScans: true },
     { id: 'csv', icon: 'table', title: 'Download metadata CSV', desc: 'Opens in Excel or Google Sheets, Hebrew included', needsScans: false },
-    { id: 'zip', icon: 'archive', title: 'Download complete archive ZIP', desc: 'Folders by category: PDFs, original photos, extracted text and the CSV', needsScans: false },
+    { id: 'zip', icon: 'archive', title: 'Download complete archive ZIP', desc: 'Category / Year folders with PDFs, original photos, extracted text and index.csv', needsScans: false },
   ];
 
   async function build(id: string, progress: (p: number) => void): Promise<{ blob: Blob; name: string }> {
     const stamp = new Date().toISOString().slice(0, 10);
-    if (id === 'csv') return { blob: new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), name: `paper-archive-${stamp}.csv` };
+    if (id === 'csv') return { blob: new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }), name: `paper-archive-${stamp}.csv` };
     if (id === 'pdf') {
       const { PDFDocument } = await getPdfLib();
       const out = await PDFDocument.create(); out.setTitle('Paper Archive');
@@ -1110,19 +1138,22 @@ function ExportTab({ docs, toast }: any) {
     const zip = new JSZip();
     const used = new Set<string>();
     const unique = (n: string) => { let x = n, k = 2; while (used.has(x)) x = `${n} (${k++})`; used.add(x); return x; };
+    const rows: IndexRow[] = [];
     for (let i = 0; i < docs.length; i++) {
-      const d = docs[i]; const base = unique(fileBase(d));
-      const folder = id === 'zip' ? safeName(d.category) + '/' : '';
+      const d = docs[i];
+      const folder = id === 'zip' ? folderFor(d) : '';
+      const base = unique(folder + fileBase(d)).slice(folder.length);
+      rows.push({ d, archive: archiveName || 'Paper Archive', path: `${folder}${base}.pdf` });
       const pdf = await documentPdf(d, true);
       if (pdf) zip.file(`${folder}${base}.pdf`, pdf);
       if (id === 'zip') {
         const text = extractedText(d).join('\n');
-        if (text) zip.file(`${folder}${base}.txt`, '﻿' + text);
-        (d.originals || []).forEach((o, p) => zip.file(`originals/${base} p${p + 1}.jpg`, dataUrlBytes(o.src)));
+        if (text) zip.file(`${folder}${base}.txt`, '\uFEFF' + text);
+        (d.originals || []).forEach((o, p) => zip.file(`${folder}${base} p${p + 1}.jpg`, dataUrlBytes(o.src)));
       }
       progress((i + 1) / (docs.length + 1));
     }
-    if (id === 'zip') zip.file('archive.csv', '﻿' + csv);
+    if (id === 'zip') zip.file('index.csv', '\uFEFF' + buildIndexCsv(rows));
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }, (m: any) => progress(0.9 + m.percent / 1000));
     return { blob, name: `paper-archive-${id === 'zip' ? 'complete' : 'documents'}-${stamp}.zip` };
   }
@@ -1460,6 +1491,114 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
   );
 }
 
+/* ---------- Export several archives into one growing folder ---------- */
+function LibraryExportSheet({ sessions, onClose, onExported, toast }: any) {
+  const [selected, setSelected] = useState(new Set(sessions.map((s: SessionMeta) => s.id)) as Set<string>);
+  const everExported = sessions.some((s: SessionMeta) => s.docs.some((d: any) => d.exportedAt));
+  const [onlyNew, setOnlyNew] = useState(everExported);
+  const [texts, setTexts] = useState(true);
+  const [photos, setPhotos] = useState(false);
+  const [st, setSt] = useState({ status: 'idle', progress: 0 } as any);
+  const chosen = sessions.filter((s: SessionMeta) => selected.has(s.id));
+  const allDocs = chosen.reduce((n: number, s: SessionMeta) => n + s.docs.length, 0);
+  const newDocs = chosen.reduce((n: number, s: SessionMeta) => n + s.docs.filter((d: any) => !d.exportedAt).length, 0);
+  const toggle = (id: string) => setSelected((cur: Set<string>) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  async function prepare() {
+    setSt({ status: 'working', progress: 0.02 });
+    try {
+      const JSZip = await getJSZip();
+      const zip = new JSZip();
+      // Paths used by earlier exports stay reserved, so a new file never overwrites an old one in Drive
+      const taken = new Set<string>();
+      sessions.forEach((s: SessionMeta) => s.docs.forEach((d: any) => d.exportPath && taken.add(d.exportPath)));
+      const unique = (base: string) => { let p = `${base}.pdf`, k = 2; while (taken.has(p)) p = `${base} (${k++}).pdf`; taken.add(p); return p; };
+      const rows: IndexRow[] = [], marks: { sid: string; id: string; path: string }[] = [];
+      let done = 0, files = 0;
+      for (const s of chosen) {
+        const { docs } = await loadArchiveDocs(s.id);
+        for (const d of docs) {
+          const path = d.exportPath || unique(folderFor(d) + fileBase(d));
+          rows.push({ d, archive: s.name, path });
+          if (!onlyNew || !d.exportedAt || !d.exportPath) {
+            const pdf = await documentPdf(d, true);
+            if (pdf) { zip.file(path, pdf); files++; }
+            const stem = path.replace(/\.pdf$/, '');
+            const text = extractedText(d).join('\n');
+            if (texts && text) zip.file(`${stem}.txt`, '\uFEFF' + text);
+            if (photos) (d.originals || []).forEach((o, i) => zip.file(`${stem} p${i + 1}.jpg`, dataUrlBytes(o.src)));
+            marks.push({ sid: s.id, id: d.id, path });
+          }
+          done++; setSt((x: any) => ({ ...x, progress: Math.min(0.9, done / Math.max(1, allDocs)) }));
+        }
+      }
+      rows.sort((x, y) => x.path.localeCompare(y.path));
+      zip.file('index.csv', '\uFEFF' + buildIndexCsv(rows));
+      zip.file('README.txt', [
+        'Paper Archive export',
+        '',
+        'Folders: Category / Year / date sender - title.pdf',
+        'index.csv lists every document from the exported archives (old and new), with the path of its file.',
+        '',
+        'To keep one growing folder (for example in Google Drive): unzip this into the same folder each time.',
+        'New files land in their folders, earlier files keep their names, and index.csv is replaced by the complete, updated list.',
+        '',
+        'ארכיון נייר: יש לחלץ את הקובץ לאותה תיקייה בכל פעם. index.csv מתעדכן ומכיל את כל המסמכים.',
+      ].join('\r\n'));
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }, (m: any) => setSt((x: any) => ({ ...x, progress: 0.9 + m.percent / 1000 })));
+      const name = `paper-archive-${onlyNew ? 'new' : 'library'}-${new Date().toISOString().slice(0, 10)}.zip`;
+      setSt({ status: 'ready', progress: 1, blob, name, marks, files, rows: rows.length });
+    } catch {
+      setSt({ status: 'error', progress: 0, error: navigator.onLine ? 'Couldn’t build the export. Try again.' : 'The file builder needs a connection the first time. Connect and try again.' });
+    }
+  }
+  const finish = () => onExported(st.marks || []);
+  const fmt = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
+
+  return (
+    <div className="sheet-wrap" onClick={onClose}>
+      <div className="sheet lib-sheet" role="dialog" aria-label="Export archives" onClick={(e: any) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <span className="privacy-icon cat-icon"><Icon name="archive" size={20} /></span>
+          <h2>Export to your folder</h2>
+          <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button>
+        </div>
+        <p className="muted lib-intro">One ZIP for several archives, with the same folders every time: <b>Category / Year</b>. Unzip it into the same folder (for example in Google Drive) and it merges with what's already there.</p>
+        <fieldset className="lib-list">
+          <legend>Archives</legend>
+          {sessions.map((s: SessionMeta) => (
+            <label key={s.id} className={selected.has(s.id) ? 'on' : ''}>
+              <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
+              <span><strong dir="auto">{s.name}</strong><small>{plural(s.docs.length, 'document')}{s.docs.some((d: any) => d.exportedAt) ? ` · ${s.docs.filter((d: any) => !d.exportedAt).length} new` : ' · not exported yet'}</small></span>
+            </label>
+          ))}
+        </fieldset>
+        <div className="lib-opts">
+          <label><input type="checkbox" checked={onlyNew} onChange={(e: any) => setOnlyNew(e.target.checked)} /> Only documents not exported before <small>({newDocs} of {allDocs})</small></label>
+          <label><input type="checkbox" checked={texts} onChange={(e: any) => setTexts(e.target.checked)} /> Text files next to each PDF</label>
+          <label><input type="checkbox" checked={photos} onChange={(e: any) => setPhotos(e.target.checked)} /> Original camera photos <small>(larger)</small></label>
+        </div>
+        <p className="fine">index.csv always lists all {allDocs} documents from the chosen archives, so the copy in your folder stays complete.</p>
+        {st.status === 'working' && <div className="progress"><i style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
+        {st.status === 'error' && <p className="form-error">{st.error}</p>}
+        {st.status === 'ready' && <p className="ready"><Icon name="check" size={14} /> Ready · {st.name} · {fmt(st.blob.size)} · {plural(st.files, 'new PDF')}, index of {st.rows}</p>}
+        <div className="cta-row end">
+          {st.status === 'ready' ? (
+            <>
+              {canShareBlob(st.blob, st.name) && <button className="btn btn-quiet" type="button" onClick={async () => { try { if (await shareBlob(st.blob, st.name)) { finish(); } } catch { toast('Sharing isn’t available here. Use Save instead.'); } }}>Share…</button>}
+              <button className="btn btn-primary" type="button" onClick={() => { saveBlob(st.blob, st.name); finish(); toast(`Saved to your ${downloadsPlace()}`); }}><Icon name="download" size={16} /> Save</button>
+            </>
+          ) : (
+            <button className="btn btn-primary" type="button" disabled={!chosen.length || st.status === 'working'} onClick={prepare}>
+              {st.status === 'working' ? `${Math.round(st.progress * 100)}%` : onlyNew && !newDocs ? 'Prepare updated index' : 'Prepare export'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, onAllArchives, archiveName, toast, onScanFor, initialOpenId = null }: any) {
   const [openId, setOpenIdRaw] = useState(initialOpenId as string | null);
   // Opening a document adds a history step, so the phone's Back button closes it instead of leaving
@@ -1563,7 +1702,7 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
         </nav>
         {tab === 'docs' && <DocumentsTab docs={docs} onOpen={setOpenId} filter={filter} setFilter={setFilter} />}
         {tab === 'review' && <ReviewTab docs={docs} resolveDuplicate={resolveDuplicate} resolveUnclear={resolveUnclear} onOpen={setOpenId} deleteDoc={deleteDoc} />}
-        {tab === 'export' && <ExportTab docs={docs} toast={toast} />}
+        {tab === 'export' && <ExportTab docs={docs} toast={toast} archiveName={archiveName} />}
       </main>
     </div>
   );
@@ -1684,6 +1823,7 @@ function App() {
   const [cameraInitial, setCameraInitial] = useState([] as RealPage[]);
   const [pageTarget, setPageTarget] = useState(null as null | { docId: string; mode: 'retake' | 'add'; index: number; title: string });
   const [reopenId, setReopenId] = useState(null as string | null);
+  const [libExport, setLibExport] = useState(false);
   const [sessions, setSessions] = useState([] as SessionMeta[]);
   const [current, setCurrentState] = useState(null as SessionMeta | null);
   const [usage, setUsage] = useState('');
@@ -1911,6 +2051,23 @@ function App() {
     toast('Started over. Place the first document.');
   }
 
+  // Remember what went into an export, so next time only new documents are added
+  async function markExported(marks: { sid: string; id: string; path: string }[]) {
+    const now = Date.now(), bySession = new Map<string, Map<string, string>>();
+    marks.forEach((m) => { if (!bySession.has(m.sid)) bySession.set(m.sid, new Map()); bySession.get(m.sid)!.set(m.id, m.path); });
+    for (const [sid, paths] of bySession) {
+      try {
+        const meta = await store.getSession(sid); if (!meta) continue;
+        const docsNext = meta.docs.map((d: any) => (paths.has(d.id) ? { ...d, exportedAt: now, exportPath: paths.get(d.id) } : d));
+        await store.putSession({ ...meta, docs: docsNext });
+        if (currentRef.current?.id === sid) {
+          currentRef.current = { ...currentRef.current, docs: docsNext };
+          setDocs((ds: ArchiveDoc[]) => ds.map((d) => (paths.has(d.id) ? { ...d, exportedAt: now, exportPath: paths.get(d.id) } : d)));
+        }
+      } catch { /* storage unavailable */ }
+    }
+    refreshSessions();
+  }
   function saveCategory(cat: CustomCat) {
     const assignTo = addCat?.assignTo;
     setCustom((cs: CustomCat[]) => [...cs, cat]);
@@ -1934,7 +2091,7 @@ function App() {
   const openPrivacy = () => setPrivacy(true);
   const sessionList = (
     <SessionList sessions={sessions} usage={usage} onContinue={continueSession} onOpen={openSession} onAddMore={addPagesTo}
-      onFinish={finishSession} onDelete={deleteSession} onRename={renameSession} onNew={startNewArchive} />
+      onFinish={finishSession} onDelete={deleteSession} onRename={renameSession} onNew={startNewArchive} onExport={() => setLibExport(true)} />
   );
 
   return (
@@ -1979,6 +2136,7 @@ function App() {
 
       {privacy && <PrivacySheet onClose={() => setPrivacy(false)} hasArchive={docs.length > 0 || sessions.length > 0}
         onDelete={async () => { try { await store.deleteAll(); } catch { /* ignore */ } setCurrent(null); setDocs([]); setDocsOwner(null); setCaptured([]); setPrivacy(false); go('home'); refreshSessions(); toast('All archives deleted from this device'); }} />}
+      {libExport && <LibraryExportSheet sessions={sessions} toast={toast} onClose={() => setLibExport(false)} onExported={markExported} />}
       {addCat && <AddCategorySheet custom={custom} assignTo={addCat.assignTo} onClose={() => setAddCat(null)} onSave={saveCategory} onRemove={removeCategory} />}
       <div className={`toast ${toastMsg ? 'show' : ''}`} role="status" aria-live="polite">{toastMsg}</div>
     </CatsCtx.Provider>

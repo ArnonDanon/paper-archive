@@ -110,8 +110,18 @@ const defaultSessionName = (t = Date.now()) => {
 };
 const fmtBytes = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : b < 1024 ** 3 ? `${Math.round(b / 1024 / 1024)} MB` : `${(b / 1024 ** 3).toFixed(1)} GB`);
 
+/** Load one saved archive's documents with their pages, without opening it. */
+async function loadArchiveDocs(id: string): Promise<{ meta: SessionMeta | undefined; docs: ArchiveDoc[] }> {
+  const meta = await store.getSession(id);
+  if (!meta) return { meta, docs: [] };
+  const pages = await store.getPages(id);
+  primeReadCache(pages);
+  const map = new Map(pages.map((p) => [p.key, p] as [string, StoredPage]));
+  return { meta, docs: meta.docs.map((d) => hydrateDoc(d, map)) };
+}
+
 /* ---------- Archive list on the home screen ---------- */
-function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDelete, onRename, onNew, usage }: any) {
+function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDelete, onRename, onNew, onExport, usage }: any) {
   const [confirmId, setConfirmId] = useState('');
   const [editId, setEditId] = useState('');
   const [editName, setEditName] = useState('');
@@ -123,7 +133,10 @@ function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDele
           <h2 className="h-section">Your archives</h2>
           <span className="fine"><Icon name="lock" size={13} /> Saved on this device{usage ? ` · ${usage}` : ''}</span>
         </div>
-        <button className="btn btn-quiet btn-sm" type="button" onClick={onNew}><Icon name="plus" size={15} /> New archive</button>
+        <div className="sessions-btns">
+          {sessions.some((s: SessionMeta) => s.docs.length) && <button className="btn btn-quiet btn-sm" type="button" onClick={onExport}><Icon name="download" size={15} /> Export</button>}
+          <button className="btn btn-quiet btn-sm" type="button" onClick={onNew}><Icon name="plus" size={15} /> New archive</button>
+        </div>
       </div>
       <div className="session-list">
         {sessions.map((s: SessionMeta) => {
