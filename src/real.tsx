@@ -22,9 +22,9 @@ interface RealPage {
 interface Detection { quad: Pt[]; gray: Uint8Array; w: number; h: number }
 
 const ANALYSIS_W = 192;
-const STEADY_MS = 600;
+const STEADY_MS = 450;
 const OCR_LONG_SIDE = 2400;   // long side of the page when reading text; small print needs the pixels
-const FOCUS_GIVE_UP_MS = 1300;   // after holding still this long, capture the sharpest we can get
+const FOCUS_GIVE_UP_MS = 800;    // after holding still this long, capture the sharpest we can get
 const MIN_DETAIL = 50;           // pages with less fine detail than this are blank surfaces, not documents
 
 /* ---------- Focus ---------- */
@@ -32,6 +32,8 @@ const MIN_DETAIL = 50;           // pages with less fine detail than this are bl
 function setupFocus(stream: MediaStream) {
   const track: any = stream.getVideoTracks()[0];
   const caps: any = (track && track.getCapabilities && track.getCapabilities()) || {};
+  // Keep exposure short where the camera lets us choose: less motion blur
+  if (track && caps.exposureMode && caps.exposureMode.includes('continuous')) track.applyConstraints({ advanced: [{ exposureMode: 'continuous' }] }).catch(() => {});
   if (track && caps.focusMode && caps.focusMode.includes('continuous')) {
     track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
   }
@@ -48,7 +50,9 @@ function focusOn(f: { track: any; caps: any }, x: number, y: number) {
  * frames have soft edges and score low; the score peaks once focus settles.
  */
 function measureSharpness(video: HTMLVideoElement, quad: Pt[], cv: HTMLCanvasElement): number {
-  const vw = video.videoWidth, vh = video.videoHeight;
+  return sharpnessIn(video, video.videoWidth, video.videoHeight, quad, cv);
+}
+function sharpnessIn(video: CanvasImageSource, vw: number, vh: number, quad: Pt[], cv: HTMLCanvasElement): number {
   const xs = quad.map((p) => p[0] * vw), ys = quad.map((p) => p[1] * vh);
   let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const ix = (x1 - x0) * 0.15, iy = (y1 - y0) * 0.15;
@@ -730,7 +734,7 @@ const REAL_STATUS: Record<RealPhase, string> = {
   same: 'Captured. Place the next page',
 };
 
-function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, initialPages = [], onPageCaptured = () => {}, onPageUpgraded = () => {}, sessionName = '', existingFaces = [] }: any) {
+function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, initialPages = [], onPageCaptured = () => {}, onPageUpgraded = () => {}, sessionName = '', existingFaces = [], target = null }: any) {
   const videoRef = useRef(null);
   const cvRef = useRef(null as any);
   if (!cvRef.current) cvRef.current = document.createElement('canvas');
@@ -746,6 +750,14 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
   const [elapsed, setElapsed] = useState(0);
   const [readKeys, setReadKeys] = useState(new Set() as Set<string>);
   const [dupKeys, setDupKeys] = useState(new Set() as Set<string>);
+  const [torch, setTorch] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const finished = useRef(false);
+  function toggleTorch() {
+    const t = focusRef.current.track; if (!t) return;
+    const next = !torch;
+    t.applyConstraints({ advanced: [{ torch: next }] }).then(() => setTorch(next)).catch(() => setHasTorch(false));
+  }
   const faces = useRef(new Map() as Map<string, PageFace>);
   const [lastBlurry, setLastBlurry] = useState(false);
   const stripRef = useRef(null);
@@ -756,6 +768,8 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
   const stillFails = useRef(0);
   const photoSettings = useRef(null as any);
   const stillCv = useRef(null as any);
+  const stillCv2 = useRef(null as any);
+  if (!stillCv2.current) stillCv2.current = document.createElement('canvas');
   if (!stillCv.current) stillCv.current = document.createElement('canvas');
 
   /**
@@ -787,6 +801,9 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
       const v = videoRef.current as HTMLVideoElement;
       const r1 = ratioOf(page.quad, v.videoWidth, v.videoHeight), r2 = ratioOf(det2.quad, bmp.width, bmp.height);
       if (Math.abs(r1 - r2) / r1 > 0.12) return page;                         // a different paper moved in
+      // Keep the photo only if it really is sharper (a hand or a refocus can blur it)
+      const stillSharp = sharpnessIn(bmp, bmp.width, bmp.height, det2.quad, stillCv2.current);
+      if (page.sharpness && stillSharp < page.sharpness * 0.9) { bmp.close?.(); return page; }
       const shot = captureFrom(bmp, bmp.width, bmp.height, det2.quad, 3200);
       bmp.close?.();
       return { ...page, ...shot, quad: det2.quad, source: 'photo' };
@@ -807,6 +824,7 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
     if (!v) return;
     v.srcObject = stream;
     focusRef.current = setupFocus(stream);
+    setHasTorch(!!focusRef.current.caps.torch);
     const onMeta = () => { if (v.videoWidth) setRatio(v.videoWidth / v.videoHeight); };
     v.addEventListener('loadedmetadata', onMeta);
     v.play?.().catch(() => {});
@@ -849,6 +867,7 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
       onPageCaptured(page, replaceKey);
       upgradeWithStill(page).then((up) => {
         if (up !== page) { setPages((ps: RealPage[]) => ps.map((p) => (p.key === page.key ? up : p))); onPageUpgraded(up); }
+        if (target?.mode === 'retake' && !finished.current) { finished.current = true; setTimeout(() => onFinish([up]), 450); }
         readPage(up).then((out) => {
           setReadKeys((ks: Set<string>) => new Set(ks).add(up.key));
           const me: PageFace = { lines: out.lines, look: up.look, aspect: up.aspect };
@@ -909,7 +928,7 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
     const sh = measureSharpness(v, q, sharpRef.current);
     if (sh > s.focusMax * 1.03) { s.focusMax = sh; s.focusMaxAt = now; }
     const held = now - s.stableSince;
-    const settled = now - s.focusMaxAt > 220 && sh >= s.focusMax * 0.88 && s.focusMax > 0;
+    const settled = now - s.focusMaxAt > 120 && sh >= s.focusMax * 0.85 && s.focusMax > 0;
     // No fine detail at all: a blank wall, screen or tabletop, not a document
     if (held > 400 && s.focusMax < MIN_DETAIL) { setPhase('searching'); setQuad(null); setProgress(0); (window as any).__paLastDetail = s.focusMax; return; }
     (window as any).__paLastDetail = s.focusMax;
@@ -947,7 +966,7 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
     <div className="cam">
       <header className="cam-top">
         <div className="cam-left">
-          <button className="btn btn-cam btn-sm" onClick={() => { setRunning(false); setConfirm(true); }} type="button"><Icon name="restart" size={15} /> Start over</button>
+          {!target && <button className="btn btn-cam btn-sm" onClick={() => { setRunning(false); setConfirm(true); }} type="button"><Icon name="restart" size={15} /> Start over</button>}
         </div>
         <div className="cam-title"><span className={`rec ${running ? '' : 'off'}`} /> {running ? 'Archiving' : 'Paused'} <span className="cam-time">{mm}:{ss}</span></div>
         <LocalPill onClick={openPrivacy} label="Local processing" dark />
@@ -1003,7 +1022,8 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
         </div>
 
         <div className="strip" ref={stripRef} aria-label="Captured pages">
-          {pages.length === 0 && !showHelp && <span className="strip-empty">No buttons to press. Lay a document down and let go.</span>}
+          {target && pages.length === initialPages.length && !showHelp && <span className="strip-empty target-note">{target.mode === 'retake' ? `Retaking page ${target.index + 1} of “${target.title}”. Lay the page down and hold still.` : `Adding pages to “${target.title}”. Lay each page down, then tap Done.`}</span>}
+          {!target && pages.length === 0 && !showHelp && <span className="strip-empty">No buttons to press. Lay a document down and let go.</span>}
           {dupKeys.size > 0 && pages.length > 0 && dupKeys.has(pages[pages.length - 1].key) && <span className="strip-empty dup-note">That page was already scanned. It will be marked as a possible duplicate.</span>}
           {initialPages.length > 0 && pages.length === initialPages.length && !showHelp && <span className="strip-empty">Continuing {sessionName ? `“${sessionName}”` : 'your archive'}. Place the next document.</span>}
           {showHelp && (
@@ -1027,7 +1047,16 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
           <button className="btn btn-cam" onClick={() => setRunning(!running)} type="button">
             <Icon name={running ? 'pause' : 'play'} size={16} /> {running ? 'Pause' : 'Resume'}
           </button>
-          <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">Finish archive</button>
+          {hasTorch && (
+            <button className={`btn btn-cam ${torch ? 'is-on' : ''}`} onClick={toggleTorch} type="button" aria-pressed={torch}>
+              <Icon name="bolt" size={16} /> Light
+            </button>
+          )}
+          {target ? (
+            <button className="btn btn-light" onClick={() => { finished.current = true; onFinish(pages.slice(initialPages.length)); }} type="button">{target.mode === 'retake' ? 'Cancel' : 'Done'}</button>
+          ) : (
+            <button className="btn btn-light" onClick={() => onFinish(pages)} type="button">Finish archive</button>
+          )}
         </div>
       </footer>
     </div>

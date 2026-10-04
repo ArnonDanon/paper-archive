@@ -386,6 +386,7 @@ const ICONS: Record<string, string> = {
   archive: 'M3 4h18v5H3zM5 9v11h14V9M10 13h4',
   restart: 'M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5',
   plus: 'M12 5v14M5 12h14',
+  bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
   tag: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
   pencil: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
@@ -1220,6 +1221,33 @@ function pageAsDocument(d: ArchiveDoc, i: number): ArchiveDoc {
   return { ...doc, capturedAt: d.capturedAt };
 }
 
+/** Put freshly scanned pages into a document: replace one page (retake) or add at the end. */
+const PAGE_FIELD_OF: Record<string, string> = { images: 'image', thumbs: 'thumb', originals: 'original', pdfs: 'pdf', pageKeys: 'pageKey', looks: 'look', aspects: 'aspect', pageTexts: 'pageText', sources: 'source' };
+function placePages(d: ArchiveDoc, mode: 'retake' | 'add', index: number, entries: any[]): ArchiveDoc {
+  const out: any = { ...d };
+  Object.entries(PAGE_FIELD_OF).forEach(([f, k]) => {
+    const arr = Array.isArray((d as any)[f]) ? [...(d as any)[f]] : [];
+    while (arr.length < d.pages) arr.push(f === 'pageTexts' ? [] : null);
+    if (mode === 'retake') arr[index] = entries[0][k]; else entries.forEach((e) => arr.push(e[k]));
+    out[f] = arr;
+  });
+  out.pages = mode === 'retake' ? d.pages : d.pages + entries.length;
+  out.ocr = (out.pageTexts as string[][]).flat().filter(Boolean);
+  if (mode === 'retake' && out.blurry) out.blurry = false;
+  return out as ArchiveDoc;
+}
+/** Re-read who sent it, date, amount and type from all of a document's text, keeping the document itself. */
+function resortDocument(d: ArchiveDoc): ArchiveDoc {
+  const pages: any[] = (d.images || []).map((img, i) => ({
+    key: d.pageKeys?.[i] || `p${i}`, image: img, thumb: d.thumbs?.[i] || img, original: d.originals?.[i]?.src || img,
+    originalRatio: d.originals?.[i]?.ratio || 1, quad: d.originals?.[i]?.quad || [], sig: [], capturedAt: Date.now(),
+    sharpness: 0, blurry: false, look: d.looks?.[i], aspect: d.aspects?.[i], source: d.sources?.[i]?.from, size: d.sources?.[i]?.size,
+  }));
+  const fresh = classifyPages({ pages, texts: d.pageTexts || pages.map(() => []) }, d.id, true);
+  return { ...d, sender: fresh.sender, letterhead: fresh.letterhead, title: fresh.title, typeWord: fresh.typeWord, date: fresh.date,
+    category: fresh.category, amount: fresh.amount, amountLabel: fresh.amountLabel, reasons: fresh.reasons, review: d.review === 'duplicate' ? d.review : fresh.review };
+}
+
 function MovePageSheet({ docs, from, onPick, onClose }: any) {
   const others = docs.filter((d: ArchiveDoc) => d.id !== from.id && d.images?.length);
   return (
@@ -1272,6 +1300,9 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
                   <img src={doc.thumbs?.[i] || doc.images[i]} alt="" /><span>{i + 1}</span>
                 </button>
               ))}
+              <button type="button" className="page-add" onClick={() => onPages.addPages(doc.id)} aria-label="Scan more pages into this document">
+                <Icon name="plus" size={18} /><small>Add page</small>
+              </button>
             </div>
           ) : doc.pages > 1 && (
             <div className="pager" role="group" aria-label="Pages">
@@ -1291,6 +1322,7 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
                 <span className="page-label num">Page {page + 1} of {doc.pages}</span>
                 <button className="btn btn-quiet btn-sm" type="button" disabled={page === 0} onClick={() => move(page - 1)} aria-label="Move page earlier"><Icon name="back" size={15} /> Earlier</button>
                 <button className="btn btn-quiet btn-sm" type="button" disabled={page >= doc.pages - 1} onClick={() => move(page + 1)} aria-label="Move page later">Later <span className="flip"><Icon name="back" size={15} /></span></button>
+                <button className="btn btn-quiet btn-sm" type="button" onClick={() => onPages.retake(doc.id, page)}><Icon name="camera" size={15} /> Retake</button>
                 <button className="btn btn-quiet btn-sm" type="button" onClick={() => setMoving(true)}>Move to…</button>
                 <button className="icon-btn" type="button" onClick={() => setConfirmPageDel(true)} aria-label="Delete this page"><Icon name="trash" size={16} /></button>
               </div>
@@ -1374,8 +1406,8 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
   );
 }
 
-function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, onAllArchives, archiveName, toast }: any) {
-  const [openId, setOpenIdRaw] = useState(null as string | null);
+function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, onAllArchives, archiveName, toast, onScanFor, initialOpenId = null }: any) {
+  const [openId, setOpenIdRaw] = useState(initialOpenId as string | null);
   // Opening a document adds a history step, so the phone's Back button closes it instead of leaving
   const setOpenId = (id: string | null) => {
     if (id) { try { history.pushState({ screen: 'archive', detail: id }, ''); } catch { /* ignore */ } setOpenIdRaw(id); }
@@ -1383,6 +1415,7 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
   };
   const openIdRef = useRef(null as string | null);
   openIdRef.current = openId;
+  useEffect(() => { if (initialOpenId) { try { history.pushState({ screen: 'archive', detail: initialOpenId }, ''); } catch { /* ignore */ } } }, []);
   useEffect(() => {
     const onPop = () => { if (openIdRef.current) setOpenIdRaw(null); };
     window.addEventListener('popstate', onPop);
@@ -1400,6 +1433,8 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
     else { update(id, { review: undefined }); toast('Kept both copies'); }
   }
   const pageOps = {
+    retake(id: string, i: number) { onScanFor?.(id, 'retake', i); },
+    addPages(id: string) { onScanFor?.(id, 'add', 0); },
     reorder(id: string, idx: number[]) { setDocs((ds: ArchiveDoc[]) => ds.map((d) => (d.id === id ? withPages(d, idx) : d))); },
     remove(id: string, i: number) {
       const d = docs.find((x: ArchiveDoc) => x.id === id); if (!d) return;
@@ -1459,10 +1494,11 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
       <AppHeader onHome={onAllArchives} openPrivacy={openPrivacy}
         right={<>
           <button className="btn btn-quiet btn-sm" onClick={onAllArchives} type="button"><Icon name="list" size={16} /> All archives</button>
-          <button className="btn btn-quiet btn-sm hide-narrow" onClick={onNewSession} type="button"><Icon name="camera" size={16} /> Add pages</button>
+
         </>} />
       <main className="archive">
         <div className="archive-head">
+          {archiveName && <button className="btn btn-primary btn-sm scan-more" onClick={onNewSession} type="button"><Icon name="camera" size={16} /> Scan more documents</button>}
           <h1 className="h-page" dir="auto">{archiveName || 'My Archive'}</h1>
           <p className="muted num">{plural(docs.length, 'document')} · {plural(pages, 'page')}{archiveName ? ' · saved on this device' : ' · sample, not saved'}</p>
         </div>
@@ -1592,6 +1628,8 @@ function App() {
   const [sessionKey, setSessionKey] = useState(0);
   const [realPages, setRealPages] = useState(null as RealPage[] | null);
   const [cameraInitial, setCameraInitial] = useState([] as RealPage[]);
+  const [pageTarget, setPageTarget] = useState(null as null | { docId: string; mode: 'retake' | 'add'; index: number; title: string });
+  const [reopenId, setReopenId] = useState(null as string | null);
   const [sessions, setSessions] = useState([] as SessionMeta[]);
   const [current, setCurrentState] = useState(null as SessionMeta | null);
   const [usage, setUsage] = useState('');
@@ -1692,7 +1730,49 @@ function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const stopStream = () => { if (stream) stream.getTracks().forEach((t: any) => t.stop()); setStream(null); };
-  useEffect(() => { if (screen !== 'camera' && stream) stopStream(); }, [screen]);
+  useEffect(() => { if (screen !== 'camera' && stream) stopStream(); if (screen !== 'camera') setPageTarget(null); }, [screen]);
+
+  /* ---------- Retake a page, or scan more pages into one document ---------- */
+  async function scanFor(docId: string, mode: 'retake' | 'add', index: number) {
+    const d = docs.find((x: ArchiveDoc) => x.id === docId); if (!d) return;
+    setCameraInitial([]);
+    const ok = await startCamera('cam', true);
+    if (ok) setPageTarget({ docId, mode, index, title: d.title });
+  }
+  async function applyScans(target: { docId: string; mode: 'retake' | 'add'; index: number }, ps: RealPage[]) {
+    stopStream(); setReopenId(target.docId); setTab('docs'); go('archive');
+    if (!ps.length) return;
+    const before = docs.find((x: ArchiveDoc) => x.id === target.docId);
+    if (!before) return;
+    const oldKey = target.mode === 'retake' ? before.pageKeys?.[target.index] : undefined;
+    const hadText = !!(before.ocr && before.ocr.length) && before.review !== 'unclear';
+    const entry = (p: RealPage, lines: string[] = []) => ({
+      image: p.image, thumb: p.thumb, original: { src: p.original, quad: p.quad, ratio: p.originalRatio }, pdf: pagePdf.get(p.key) || null,
+      pageKey: p.key, look: p.look, aspect: p.aspect, pageText: lines, source: p.source ? { from: p.source, size: p.size } : null,
+    });
+    // Show the new scan straight away
+    setDocs((ds: ArchiveDoc[]) => ds.map((d) => (d.id === target.docId ? placePages(d, target.mode, target.index, ps.map((p) => entry(p))) : d)));
+    toast(target.mode === 'retake' ? 'Page retaken. Reading its text…' : `Added ${plural(ps.length, 'page')}. Reading the text…`);
+    const cur = currentRef.current;
+    if (cur) {
+      const processed = Array.from(new Set([...((cur as any).processed || []), ...ps.map((p) => p.key)]));
+      await saveMeta({ processed, pageKeys: oldKey ? cur.pageKeys.filter((k) => k !== oldKey) : cur.pageKeys } as any);
+      if (oldKey) store.deletePages([oldKey]).catch(() => {});
+    }
+    // Then fill in the text (and re-sort if the document had none before)
+    const outs = await Promise.all(ps.map((p) => readPage(p)));
+    setDocs((ds: ArchiveDoc[]) => ds.map((d) => {
+      if (d.id !== target.docId) return d;
+      const next: any = { ...d, pageTexts: [...(d.pageTexts || [])], pdfs: [...(d.pdfs || [])] };
+      ps.forEach((p, i) => {
+        const at = (d.pageKeys || []).indexOf(p.key);
+        if (at >= 0) { next.pageTexts[at] = outs[i].lines; next.pdfs[at] = pagePdf.get(p.key) || null; }
+      });
+      next.ocr = (next.pageTexts as string[][]).flat().filter(Boolean);
+      return hadText ? next : resortDocument(next);
+    }));
+    toast(target.mode === 'retake' ? 'New page is ready' : 'Pages added');
+  }
 
   function samplePages(): PageImage[] {
     const t0 = Date.now() - 14 * 60000;
@@ -1748,6 +1828,7 @@ function App() {
     setRealPages(r.pending); go('processing');
   }
   async function openSession(id: string) {
+    setReopenId(null);
     const r = await loadSession(id); if (!r) return;
     setTab('docs'); go('archive');
   }
@@ -1809,12 +1890,14 @@ function App() {
       {screen === 'how' && <HowScreen onBack={() => go('home')} onStart={startNewArchive} openPrivacy={openPrivacy} onSample={openSample} />}
       {screen === 'setup' && <SetupScreen onBack={() => go('home')} onStartCamera={(src: string) => startCamera(src)} openPrivacy={openPrivacy} />}
       {screen === 'camera' && stream && <RealCameraScreen key={sessionKey} stream={stream} openPrivacy={openPrivacy}
+        target={pageTarget ? { mode: pageTarget.mode, index: pageTarget.index, title: pageTarget.title } : null}
         initialPages={cameraInitial} onPageCaptured={onPageCaptured} sessionName={current?.name || ''}
         existingFaces={(docsOwner && current && docsOwner === current.id ? docs : []).flatMap((d: ArchiveDoc) => (d.looks || []).map((look, i) => ({ look, aspect: d.aspects?.[i], lines: d.pageTexts?.[i] || [] })))}
         onPageUpgraded={(pg: RealPage) => { const m = currentRef.current; if (m) store.putPage({ ...pg, sessionId: m.id } as StoredPage).catch(() => {}); }}
         onRestart={discardPending}
         onExit={() => { stopStream(); go('home'); refreshSessions(); }}
         onFinish={(ps: RealPage[]) => {
+          if (pageTarget) { applyScans(pageTarget, ps); return; }
           if (!ps.length) { toast('No pages captured yet. Lay a document in view and hold it still for a second.'); return; }
           stopStream(); setRealPages(ps); go('processing');
         }} />}
@@ -1835,8 +1918,9 @@ function App() {
       {screen === 'processing' && !realPages && <ProcessingScreen pages={captured} usedSample={usedSample} openPrivacy={openPrivacy}
         onView={(d: ArchiveDoc[]) => { setCurrent(null); setDocsOwner(null); setDocs(custom.reduce((acc: ArchiveDoc[], c: CustomCat) => applyCategoryRule(c, acc).docs, d)); setTab('docs'); go('archive'); }} />}
       {screen === 'archive' && <ArchiveScreen docs={docs} setDocs={setDocs} tab={tab} setTab={setTab} openPrivacy={openPrivacy} toast={toast}
+        onScanFor={scanFor} initialOpenId={reopenId}
         archiveName={docsOwner ? current?.name : ''}
-        onAllArchives={() => { go('home'); refreshSessions(); }}
+        onAllArchives={() => { setReopenId(null); go('home'); refreshSessions(); }}
         onNewSession={() => { setCameraInitial([]); go('setup'); }} />}
 
       {privacy && <PrivacySheet onClose={() => setPrivacy(false)} hasArchive={docs.length > 0 || sessions.length > 0}

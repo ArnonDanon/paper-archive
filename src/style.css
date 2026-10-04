@@ -526,3 +526,9 @@ mark{background:color-mix(in srgb, var(--warn) 28%, transparent); color:inherit;
 .move-item strong{font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .move-item small{color:var(--muted); font-size:12.5px}
 .move-new{width:40px; height:54px; display:grid; place-items:center; border:1px dashed var(--accent); border-radius:6px; color:var(--accent); flex:none}
+
+.page-add{flex:none; width:54px; height:72px; margin:2px; display:grid; place-content:center; justify-items:center; gap:2px; border:1.5px dashed var(--accent); border-radius:6px; background:none; color:var(--accent)}
+.page-add small{font-size:10.5px; line-height:1.1}
+.scan-more{justify-self:start; order:3; margin-top:6px}
+.btn-cam.is-on{background:#F6D86B; color:#2a2205; border-color:#F6D86B}
+.target-note{color:var(--cam-ink)}
