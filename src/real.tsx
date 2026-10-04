@@ -22,9 +22,9 @@ interface RealPage {
 interface Detection { quad: Pt[]; gray: Uint8Array; w: number; h: number }
 
 const ANALYSIS_W = 192;
-const STEADY_MS = 450;
+const STEADY_MS = 250;          // hold still this long before the shot (focus is measured meanwhile)
 const OCR_LONG_SIDE = 2400;   // long side of the page when reading text; small print needs the pixels
-const FOCUS_GIVE_UP_MS = 800;    // after holding still this long, capture the sharpest we can get
+const FOCUS_GIVE_UP_MS = 350;    // after holding still this long, capture the sharpest we can get
 const MIN_DETAIL = 50;           // pages with less fine detail than this are blank surfaces, not documents
 
 /* ---------- Focus ---------- */
@@ -939,14 +939,14 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
     const delta = s.smooth ? maxCornerDelta(q, s.smooth) : 1;
     s.smooth = q; setQuad(q);
     if (now < s.cooldownUntil) return;
-    if (delta > 0.012) { s.stableSince = 0; setProgress(0); setPhase(s.waitingNew ? 'same' : 'detected'); return; }
+    if (delta > 0.018) { s.stableSince = 0; setProgress(0); setPhase(s.waitingNew ? 'same' : 'detected'); return; }
     if (!s.stableSince) {
       s.stableSince = now; s.focusMax = 0; s.focusMaxAt = now;
       const cx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, cy = (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4;
       if (!s.focusedFor) { focusOn(focusRef.current, cx, cy); s.focusedFor = 'once'; } // aim focus once; continuous autofocus does the rest
     }
     if (s.waitingNew) {
-      if (now - s.stableSince < 300) { setPhase('same'); return; }
+      if (now - s.stableSince < 200) { setPhase('same'); return; }
       const sameSpot = s.lastQuad ? maxCornerDelta(q, s.lastQuad) < 0.05 : false;
       const samePage = s.lastSig ? sigDiff(signature(det, q), s.lastSig) < 0.5 : false;
       if (sameSpot && samePage) {
@@ -957,13 +957,13 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
         }
         setPhase('same'); return;
       }
-      s.waitingNew = false; s.stableSince = now; s.focusMax = 0; s.focusMaxAt = now; // a different page is on the table
+      s.waitingNew = false; s.focusMax = 0; s.focusMaxAt = now; // a different page is on the table; it has already been still, so no new wait
     }
     // Hold still, then wait for focus to settle: sharpness stops improving and stays near its best.
     const sh = measureSharpness(v, q, sharpRef.current);
     if (sh > s.focusMax * 1.03) { s.focusMax = sh; s.focusMaxAt = now; }
     const held = now - s.stableSince;
-    const settled = now - s.focusMaxAt > 120 && sh >= s.focusMax * 0.85 && s.focusMax > 0;
+    const settled = now - s.focusMaxAt > 80 && sh >= s.focusMax * 0.85 && s.focusMax > 0;
     // No fine detail at all: a blank wall, screen or tabletop, not a document
     if (held > 400 && s.focusMax < MIN_DETAIL) { setPhase('searching'); setQuad(null); setProgress(0); (window as any).__paLastDetail = s.focusMax; return; }
     (window as any).__paLastDetail = s.focusMax;
