@@ -79,7 +79,7 @@ function askPersistentStorage() {
 }
 
 const toStoredDoc = (d: ArchiveDoc): StoredDoc => {
-  const { images, thumbs, originals, pdfs, looks, aspects, pageTexts, ...rest } = d as any;
+  const { images, thumbs, originals, pdfs, looks, aspects, pageTexts, sources, ...rest } = d as any;
   return { ...rest, pageKeys: d.pageKeys || [] };
 };
 function hydrateDoc(d: StoredDoc, pages: Map<string, StoredPage>): ArchiveDoc {
@@ -89,6 +89,7 @@ function hydrateDoc(d: StoredDoc, pages: Map<string, StoredPage>): ArchiveDoc {
     ...d, images: ps.map((p) => p.image), thumbs: ps.map((p) => p.thumb),
     originals: ps.map((p) => ({ src: p.original, quad: p.quad, ratio: p.originalRatio })),
     looks: ps.map((p: any) => p.look), aspects: ps.map((p: any) => p.aspect), pageTexts: ps.map((p) => (p.ocr && p.ocr.lines) || []),
+    sources: ps.map((p: any) => (p.source ? { from: p.source, size: p.size } : null)),
     pdfs: ps.map((p) => p.pdf || null),
   } as ArchiveDoc;
 }
@@ -146,7 +147,7 @@ function SessionList({ sessions, onContinue, onOpen, onAddMore, onFinish, onDele
                   </button>
                 )}
                 <span className="session-meta num">
-                  {s.docs.length ? `${plural(s.docs.length, 'document')} · ` : ''}{plural(s.pageKeys.length, 'page')}
+                  {s.docs.length ? `${plural(s.docs.length, 'document')} · ` : ''}{plural(s.docs.reduce((n, d) => n + (d.pageKeys || []).length, 0) + pending, 'page')}
                   {review ? ` · ${review} to review` : ''}
                 </span>
                 {pending > 0 && <span className="pill-warn session-pill">{plural(pending, 'page')} not sorted yet</span>}

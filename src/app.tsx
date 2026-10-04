@@ -49,6 +49,7 @@ interface ArchiveDoc {
   looks?: (Uint8Array | undefined)[];
   aspects?: (number | undefined)[];
   pageTexts?: string[][];
+  sources?: ({ from: 'photo' | 'video'; size?: [number, number] } | null)[];
 }
 
 const CATEGORIES: Category[] = ['Bills', 'Insurance', 'Bank', 'Government', 'Other'];
@@ -1191,13 +1192,71 @@ function ExportTab({ docs, toast }: any) {
   );
 }
 
-function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete }: any) {
+/* ---------- Rearranging pages ---------- */
+const PAGE_FIELDS = ['images', 'thumbs', 'originals', 'pdfs', 'pageKeys', 'looks', 'aspects', 'pageTexts', 'sources'];
+/** A copy of the document holding only the given pages, in the given order. */
+function withPages(d: ArchiveDoc, idx: number[], extra?: { from: ArchiveDoc; idx: number[] }): ArchiveDoc {
+  const out: any = { ...d };
+  PAGE_FIELDS.forEach((f) => {
+    const mine = (d as any)[f], theirs = extra ? (extra.from as any)[f] : null;
+    if (!Array.isArray(mine) && !Array.isArray(theirs)) return;
+    out[f] = [...idx.map((i) => (mine || [])[i]), ...(extra ? extra.idx.map((i) => (theirs || [])[i]) : [])];
+  });
+  out.pages = idx.length + (extra ? extra.idx.length : 0);
+  if (out.pageTexts) out.ocr = (out.pageTexts as string[][]).flat();
+  return out as ArchiveDoc;
+}
+/** Turn one page into a document of its own and sort it from its own text. */
+function pageAsDocument(d: ArchiveDoc, i: number): ArchiveDoc {
+  const o = d.originals?.[i];
+  const page: any = {
+    key: d.pageKeys?.[i] || `p${Date.now()}`, image: d.images![i], thumb: d.thumbs?.[i] || d.images![i],
+    original: o?.src || d.images![i], originalRatio: o?.ratio || 1, quad: o?.quad || [], sig: [], capturedAt: Date.now(),
+    sharpness: 0, blurry: false, look: d.looks?.[i], aspect: d.aspects?.[i],
+    source: d.sources?.[i]?.from, size: d.sources?.[i]?.size,
+  };
+  const doc = classifyPages({ pages: [page], texts: [d.pageTexts?.[i] || []] }, `r${Date.now().toString(36)}s`, true);
+  if (d.pdfs?.[i]) doc.pdfs = [d.pdfs[i]];
+  return { ...doc, capturedAt: d.capturedAt };
+}
+
+function MovePageSheet({ docs, from, onPick, onClose }: any) {
+  const others = docs.filter((d: ArchiveDoc) => d.id !== from.id && d.images?.length);
+  return (
+    <div className="sheet-wrap" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-label="Move page" onClick={(e: any) => e.stopPropagation()}>
+        <div className="sheet-head"><h2>Move this page to…</h2>
+          <button className="icon-btn" onClick={onClose} type="button" aria-label="Close"><Icon name="close" /></button></div>
+        <div className="move-list">
+          <button type="button" className="move-item new" onClick={() => onPick('new')}>
+            <span className="move-new"><Icon name="plus" size={18} /></span>
+            <span><strong>A new document</strong><small>Sorted on its own from this page’s text</small></span>
+          </button>
+          {others.map((d: ArchiveDoc) => (
+            <button type="button" className="move-item" key={d.id} onClick={() => onPick(d.id)}>
+              <span className="thumb"><DocPaper doc={d} /></span>
+              <span><strong dir="auto">{d.title}</strong><small dir="auto">{d.sender === 'Unknown' ? '' : d.sender + ' · '}{d.date || 'No date'} · {plural(d.pages, 'page')}</small></span>
+            </button>
+          ))}
+        </div>
+        <p className="fine">The page is added at the end. You can then move it earlier.</p>
+      </div>
+    </div>
+  );
+}
+
+function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, docs = [], onPages }: any) {
   const [confirmDel, setConfirmDel] = useState(false);
   const { all, openAdd } = useCats();
   const [page, setPage] = useState(0);
   const [original, setOriginal] = useState(false);
   const lines = extractedText(doc);
+  const [moving, setMoving] = useState(false);
+  const [confirmPageDel, setConfirmPageDel] = useState(false);
   useEffect(() => { setPage(0); }, [doc.id]);
+  useEffect(() => { if (page > doc.pages - 1) setPage(Math.max(0, doc.pages - 1)); setConfirmPageDel(false); }, [doc.pages, page]);
+  const editable = !!(doc.images?.length && onPages);
+  const move = (to: number) => { const idx = [...Array(doc.pages).keys()]; const [x] = idx.splice(page, 1); idx.splice(to, 0, x); onPages.reorder(doc.id, idx); setPage(to); };
   return (
     <div className="detail" role="dialog" aria-label={doc.title}>
       <div className="detail-bar">
@@ -1206,16 +1265,44 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete }: a
       <div className="detail-grid">
         <section className="detail-preview">
           <div className="big-paper"><DocPaper doc={doc} page={page} /></div>
-          <div className="preview-tools">
-            {doc.pages > 1 && (
-              <div className="pager" role="group" aria-label="Pages">
-                {Array.from({ length: doc.pages }).map((_, i) => (
-                  <button key={i} type="button" className={i === page ? 'on' : ''} onClick={() => setPage(i)}>{i + 1}</button>
-                ))}
+          {editable ? (
+            <div className="page-strip" role="group" aria-label="Pages">
+              {Array.from({ length: doc.pages }).map((_, i) => (
+                <button key={(doc.pageKeys || [])[i] || i} type="button" className={`page-thumb ${i === page ? 'on' : ''}`} onClick={() => setPage(i)} aria-label={`Page ${i + 1}`}>
+                  <img src={doc.thumbs?.[i] || doc.images[i]} alt="" /><span>{i + 1}</span>
+                </button>
+              ))}
+            </div>
+          ) : doc.pages > 1 && (
+            <div className="pager" role="group" aria-label="Pages">
+              {Array.from({ length: doc.pages }).map((_, i) => (
+                <button key={i} type="button" className={i === page ? 'on' : ''} onClick={() => setPage(i)}>{i + 1}</button>
+              ))}
+            </div>
+          )}
+          {editable && (
+            confirmPageDel ? (
+              <div className="page-actions confirm-row"><span>Delete page {page + 1}{doc.pages === 1 ? ' and this document' : ''}?</span>
+                <button className="btn btn-quiet btn-sm" type="button" onClick={() => setConfirmPageDel(false)}>Cancel</button>
+                <button className="btn btn-danger btn-sm" type="button" onClick={() => { setConfirmPageDel(false); onPages.remove(doc.id, page); }}>Delete</button>
               </div>
-            )}
+            ) : (
+              <div className="page-actions" role="group" aria-label={`Page ${page + 1} of ${doc.pages}`}>
+                <span className="page-label num">Page {page + 1} of {doc.pages}</span>
+                <button className="btn btn-quiet btn-sm" type="button" disabled={page === 0} onClick={() => move(page - 1)} aria-label="Move page earlier"><Icon name="back" size={15} /> Earlier</button>
+                <button className="btn btn-quiet btn-sm" type="button" disabled={page >= doc.pages - 1} onClick={() => move(page + 1)} aria-label="Move page later">Later <span className="flip"><Icon name="back" size={15} /></span></button>
+                <button className="btn btn-quiet btn-sm" type="button" onClick={() => setMoving(true)}>Move to…</button>
+                <button className="icon-btn" type="button" onClick={() => setConfirmPageDel(true)} aria-label="Delete this page"><Icon name="trash" size={16} /></button>
+              </div>
+            )
+          )}
+          <div className="preview-tools">
             <button className="btn btn-quiet" onClick={() => setOriginal(true)} type="button"><Icon name="eye" size={16} /> View original page</button>
           </div>
+          {doc.sources?.[page] && (
+            <p className="fine scan-src">Scan {doc.sources[page].size ? `${doc.sources[page].size[0]} × ${doc.sources[page].size[1]} px` : ''} · from the {doc.sources[page].from === 'photo' ? 'full-resolution camera photo' : 'video picture'}</p>
+          )}
+          {moving && <MovePageSheet docs={docs} from={doc} onClose={() => setMoving(false)} onPick={(target: string) => { setMoving(false); onPages.moveTo(doc.id, page, target); }} />}
         </section>
 
         <section className="detail-info">
@@ -1312,6 +1399,38 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
     if (isDup) { setDocs((ds: ArchiveDoc[]) => ds.filter((d) => d.id !== id)); toast('Marked as duplicate. The first copy is kept.'); }
     else { update(id, { review: undefined }); toast('Kept both copies'); }
   }
+  const pageOps = {
+    reorder(id: string, idx: number[]) { setDocs((ds: ArchiveDoc[]) => ds.map((d) => (d.id === id ? withPages(d, idx) : d))); },
+    remove(id: string, i: number) {
+      const d = docs.find((x: ArchiveDoc) => x.id === id); if (!d) return;
+      const key = d.pageKeys?.[i];
+      if (key) store.deletePages([key]).catch(() => {});
+      if (d.pages <= 1) { deleteDoc(id); return; }
+      setDocs((ds: ArchiveDoc[]) => ds.map((x) => (x.id === id ? withPages(x, [...Array(x.pages).keys()].filter((k) => k !== i)) : x)));
+      toast('Page deleted');
+    },
+    moveTo(id: string, i: number, target: string) {
+      const src = docs.find((x: ArchiveDoc) => x.id === id); if (!src) return;
+      const rest = [...Array(src.pages).keys()].filter((k) => k !== i);
+      let created: ArchiveDoc | null = null;
+      setDocs((ds: ArchiveDoc[]) => {
+        let out = ds.map((d) => {
+          if (d.id === target) return withPages(d, [...Array(d.pages).keys()], { from: src, idx: [i] });
+          if (d.id === id) return rest.length ? withPages(d, rest) : null;
+          return d;
+        }).filter(Boolean) as ArchiveDoc[];
+        if (target === 'new') {
+          created = pageAsDocument(src, i);
+          const at = out.findIndex((d) => d.id === id);
+          out.splice(at < 0 ? out.length : at + 1, 0, created);
+        }
+        return out;
+      });
+      const name = target === 'new' ? 'a new document' : `“${docs.find((x: ArchiveDoc) => x.id === target)?.title || 'the document'}”`;
+      toast(`Page moved to ${name}`);
+      if (!rest.length) setTimeout(() => setOpenId(null), 0);
+    },
+  };
   function deleteDoc(id: string) {
     setDocs((ds: ArchiveDoc[]) => ds.filter((d) => d.id !== id));
     if (openIdRef.current === id) setOpenId(null);
@@ -1329,7 +1448,7 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
     return (
       <div className="page">
         <AppHeader onHome={() => setOpenId(null)} openPrivacy={openPrivacy} />
-        <DocumentDetail doc={open} onDelete={deleteDoc} onBack={() => setOpenId(null)} goReview={() => { setOpenId(null); setTab('review'); }}
+        <DocumentDetail doc={open} docs={docs} onPages={pageOps} onDelete={deleteDoc} onBack={() => setOpenId(null)} goReview={() => { setOpenId(null); setTab('review'); }}
           onChangeCategory={(id: string, c: Category) => { update(id, { category: c }); toast(`Category changed to ${c}`); }} />
       </div>
     );

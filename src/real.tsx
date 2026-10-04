@@ -17,6 +17,7 @@ interface RealPage {
   key: string; image: string; thumb: string; original: string; originalRatio: number;
   quad: Pt[]; sig: number[]; capturedAt: number; sharpness: number; blurry: boolean;
   look?: Uint8Array; aspect?: number;   // small grey copy of the flattened page, for spotting re-scans
+  source?: 'photo' | 'video'; size?: [number, number];
 }
 interface Detection { quad: Pt[]; gray: Uint8Array; w: number; h: number }
 
@@ -193,9 +194,30 @@ function sigDiff(a: number[], b: number[]) {
   return s / a.length;
 }
 
+/**
+ * Gentle unsharp mask on brightness only: crisper letter edges without colour fringes.
+ * out = pixel + amount × (brightness − blurred brightness)
+ */
+function sharpen(o: Uint8ClampedArray, W: number, H: number, amount: number) {
+  const n = W * H, L = new Float32Array(n), T = new Float32Array(n);
+  for (let i = 0, j = 0; i < n; i++, j += 4) L[i] = 0.3 * o[j] + 0.59 * o[j + 1] + 0.11 * o[j + 2];
+  for (let y = 0; y < H; y++) {
+    const r = y * W;
+    T[r] = L[r]; T[r + W - 1] = L[r + W - 1];
+    for (let x = 1; x < W - 1; x++) T[r + x] = (L[r + x - 1] + 2 * L[r + x] + L[r + x + 1]) * 0.25;
+  }
+  for (let x = 0; x < W; x++) {
+    for (let y = 1; y < H - 1; y++) {
+      const i = y * W + x, blur = (T[i - W] + 2 * T[i] + T[i + W]) * 0.25, d = amount * (L[i] - blur), j = i * 4;
+      if (d > -1 && d < 1) continue;
+      o[j] += d; o[j + 1] += d; o[j + 2] += d;
+    }
+  }
+}
+
 /** Grab the full-resolution frame and flatten the paper into a straight page. */
 function captureFrame(video: HTMLVideoElement, quad: Pt[]) {
-  return captureFrom(video, video.videoWidth, video.videoHeight, quad, 2200);
+  return { ...captureFrom(video, video.videoWidth, video.videoHeight, quad, 2200), source: 'video' as const };
 }
 function captureFrom(video: CanvasImageSource, vw: number, vh: number, quad: Pt[], maxLong: number) {
   const fc = document.createElement('canvas'); fc.width = vw; fc.height = vh;
@@ -236,6 +258,7 @@ function captureFrom(video: CanvasImageSource, vw: number, vh: number, quad: Pt[
     const sr = 250 / (wr - lo), sg = 250 / (wg - lo), sb = 250 / (wb - lo);
     for (let i = 0; i < o.length; i += 4) { o[i] = (o[i] - lo) * sr; o[i + 1] = (o[i + 1] - lo) * sg; o[i + 2] = (o[i + 2] - lo) * sb; }
   }
+  sharpen(o, W, Hh, 0.8);
   octx.putImageData(img, 0, 0);
   const image = oc.toDataURL('image/jpeg', 0.92);
   const lc = document.createElement('canvas'); lc.width = LOOK_W; lc.height = LOOK_H;
@@ -253,7 +276,7 @@ function captureFrom(video: CanvasImageSource, vw: number, vh: number, quad: Pt[
   const ocv = document.createElement('canvas'); ocv.width = Math.round(vw * os); ocv.height = Math.round(vh * os);
   (ocv.getContext('2d') as CanvasRenderingContext2D).drawImage(fc, 0, 0, ocv.width, ocv.height);
   const original = ocv.toDataURL('image/jpeg', 0.75);
-  return { image, thumb, original, originalRatio: vw / vh, look, aspect: W / Hh };
+  return { image, thumb, original, originalRatio: vw / vh, look, aspect: W / Hh, size: [W, Hh] as [number, number] };
 }
 
 /* ---------- Text reading (Tesseract.js, runs on device) ---------- */
@@ -557,6 +580,7 @@ function classifyPages(group: { pages: RealPage[]; texts: string[][] }, uid: str
     tint: '#8C95A2', kind: 'letter', tilt: 0,
     real: true, images: group.pages.map((p) => p.image), thumbs: group.pages.map((p) => p.thumb),
     originals: group.pages.map((p) => ({ src: p.original, quad: p.quad, ratio: p.originalRatio })),
+    sources: group.pages.map((p) => (p.source ? { from: p.source, size: p.size } : null)),
     pageKeys: group.pages.map((p) => p.key), looks: group.pages.map((p) => p.look), aspects: group.pages.map((p) => p.aspect), pageTexts: group.texts, ocr: lines, reasons, pdfs: group.pages.map((p) => pagePdf.get(p.key) || null), blurry: group.pages.some((p) => p.blurry),
     review: !ocrOk || !lines.length || (!sender && !userCat) ? 'unclear' : undefined,
     capturedAt: clock(p0.capturedAt),
@@ -729,6 +753,8 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
   if (!sharpRef.current) sharpRef.current = document.createElement('canvas');
   const focusRef = useRef({ track: null as any, caps: {} as any });
   const stillOk = useRef(true);
+  const stillFails = useRef(0);
+  const photoSettings = useRef(null as any);
   const stillCv = useRef(null as any);
   if (!stillCv.current) stillCv.current = document.createElement('canvas');
 
@@ -741,21 +767,30 @@ function RealCameraScreen({ stream, onFinish, onRestart, onExit, openPrivacy, in
   async function upgradeWithStill(page: RealPage): Promise<RealPage> {
     const IC = (window as any).ImageCapture, track = focusRef.current.track;
     if (!stillOk.current || !IC || !track || track.readyState !== 'live') return page;
-    const t0 = performance.now();
     try {
-      const blob = await withTimeout(new IC(track).takePhoto(), 2500);
+      const ic = new IC(track);
+      if (!photoSettings.current) {
+        // Ask for the camera's largest photo size (the default is sometimes smaller)
+        try {
+          const caps: any = await withTimeout(ic.getPhotoCapabilities(), 2000);
+          photoSettings.current = caps?.imageWidth?.max ? { imageWidth: caps.imageWidth.max, imageHeight: caps.imageHeight?.max } : {};
+        } catch { photoSettings.current = {}; }
+      }
+      let blob: Blob;
+      try { blob = await withTimeout(ic.takePhoto(photoSettings.current), 6000); }
+      catch { blob = await withTimeout(ic.takePhoto(), 6000); photoSettings.current = {}; }
       const bmp: any = await createImageBitmap(blob);
-      if (performance.now() - t0 > 1800) stillOk.current = false;
+      stillFails.current = 0;
       const det2 = detectPaperIn(bmp, bmp.width, bmp.height, stillCv.current);
       if (!det2) return page;
       const ratioOf = (q: Pt[], w: number, h: number) => dist([q[0][0] * w, q[0][1] * h], [q[1][0] * w, q[1][1] * h]) / Math.max(1, dist([q[0][0] * w, q[0][1] * h], [q[3][0] * w, q[3][1] * h]));
       const v = videoRef.current as HTMLVideoElement;
       const r1 = ratioOf(page.quad, v.videoWidth, v.videoHeight), r2 = ratioOf(det2.quad, bmp.width, bmp.height);
       if (Math.abs(r1 - r2) / r1 > 0.12) return page;                         // a different paper moved in
-      const shot = captureFrom(bmp, bmp.width, bmp.height, det2.quad, 3000);
+      const shot = captureFrom(bmp, bmp.width, bmp.height, det2.quad, 3200);
       bmp.close?.();
-      return { ...page, ...shot, quad: det2.quad };
-    } catch { stillOk.current = false; return page; }
+      return { ...page, ...shot, quad: det2.quad, source: 'photo' };
+    } catch { if (++stillFails.current >= 3) stillOk.current = false; return page; }
   }
   const lastInitial: RealPage | undefined = initialPages[initialPages.length - 1];
   const st = useRef({

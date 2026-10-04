@@ -508,3 +508,21 @@ mark{background:color-mix(in srgb, var(--warn) 28%, transparent); color:inherit;
 .del-row{margin-top:18px}
 .dup-mark{position:absolute; left:-5px; top:-5px; background:var(--warn); color:#1d1406; font-size:10px; font-weight:700; padding:0 4px; border-radius:6px; line-height:16px}
 .dup-note{color:#E9B866}
+
+/* page arranging */
+.page-strip{display:flex; gap:8px; overflow-x:auto; max-width:100%; padding:4px 2px 6px; scrollbar-width:thin}
+.page-thumb{position:relative; flex:none; padding:0; border:2px solid transparent; border-radius:6px; background:none; line-height:0}
+.page-thumb img{height:72px; width:auto; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,.15); background:#fff}
+.page-thumb span{position:absolute; left:4px; bottom:4px; font-size:11px; line-height:16px; min-width:16px; padding:0 4px; border-radius:4px; background:var(--ink); color:var(--bg); font-variant-numeric:tabular-nums}
+.page-thumb.on{border-color:var(--accent)}
+.page-actions{display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:center}
+.page-label{font-size:13px; color:var(--muted); margin-inline-end:4px}
+.flip{display:inline-flex; transform:scaleX(-1)}
+.scan-src{justify-content:center; text-align:center}
+.move-list{display:grid; gap:6px; max-height:55vh; overflow-y:auto}
+.move-item{display:flex; gap:12px; align-items:center; text-align:start; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--surface)}
+.move-item:hover{border-color:var(--accent)}
+.move-item > span:last-child{display:grid; min-width:0}
+.move-item strong{font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.move-item small{color:var(--muted); font-size:12.5px}
+.move-new{width:40px; height:54px; display:grid; place-items:center; border:1px dashed var(--accent); border-radius:6px; color:var(--accent); flex:none}
