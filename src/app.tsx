@@ -50,6 +50,7 @@ interface ArchiveDoc {
   aspects?: (number | undefined)[];
   pageTexts?: string[][];
   sources?: ({ from: 'photo' | 'video'; size?: [number, number] } | null)[];
+  edited?: string[];   // fields the person set by hand
 }
 
 const CATEGORIES: Category[] = ['Bills', 'Insurance', 'Bank', 'Government', 'Other'];
@@ -1273,7 +1274,42 @@ function MovePageSheet({ docs, from, onPick, onClose }: any) {
   );
 }
 
-function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, docs = [], onPages }: any) {
+function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, docs = [], onPages, onEdit }: any) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ title: '', sender: '', date: '', amount: '' });
+  const wasEdited = (f: string) => (doc.edited || []).includes(f);
+  const tag = (f: string, detected: boolean) => (wasEdited(f) ? 'Set by you' : detected ? 'Detected' : '');
+  const toIso = (d: string) => { const m = (d || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+  const fromIso = (d: string) => { const m = (d || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
+  function startEdit() {
+    setForm({ title: doc.title, sender: isUnknown(doc) ? '' : doc.sender, date: toIso(doc.date), amount: doc.amount || '' });
+    setEditing(true);
+  }
+  function saveEdit() {
+    const patch: any = {}, changed: string[] = [];
+    const title = form.title.trim(), sender = form.sender.trim(), date = fromIso(form.date);
+    let amount = form.amount.trim().replace(/\s/g, '');
+    if (amount && !amount.startsWith('₪')) amount = '₪' + amount.replace(/^(ש"ח|NIS)/i, '');
+    if (title && title !== doc.title) { patch.title = title; changed.push('title'); }
+    if (sender !== (isUnknown(doc) ? '' : doc.sender)) { patch.sender = sender || 'Unknown'; patch.letterhead = sender; changed.push('sender'); }
+    if (date !== (doc.date || '')) { patch.date = date; changed.push('date'); }
+    if (amount !== (doc.amount || '')) { patch.amount = amount || undefined; changed.push('amount'); }
+    setEditing(false);
+    if (!changed.length) return;
+    if (doc.review === 'unclear' && (patch.sender || patch.date)) patch.review = undefined;
+    patch.edited = Array.from(new Set([...(doc.edited || []), ...changed]));
+    patch.reasons = reasonsFor(doc).map((r) => {
+      const f = /sender/i.test(r.label) ? 'sender' : /date/i.test(r.label) ? 'date' : /amount/i.test(r.label) ? 'amount' : '';
+      if (!f || !changed.includes(f)) return r;
+      return { label: f === 'sender' ? 'Sender' : f === 'date' ? 'Date' : 'Amount', value: patch[f] || '—', source: 'Set by you' };
+    });
+    onEdit(doc.id, patch);
+  }
+  function lookAgain() {
+    const d = findDate(extractedText(doc).join('\n'));
+    if (d) onEdit(doc.id, { date: d, reasons: [...reasonsFor(doc).filter((r) => !/date/i.test(r.label)), { label: 'Detected date', value: d, source: 'Found on a second look at the text' }] }, `Found ${d}`);
+    else { startEdit(); setTimeout(() => (document.getElementById('ed-date') as any)?.focus?.(), 50); onEdit(doc.id, {}, 'No date in the text. You can set it here.'); }
+  }
   const [confirmDel, setConfirmDel] = useState(false);
   const { all, openAdd } = useCats();
   const [page, setPage] = useState(0);
@@ -1351,13 +1387,31 @@ function DocumentDetail({ doc, onBack, onChangeCategory, goReview, onDelete, doc
               <option value="__new">+ New category…</option>
             </select>
           </div>
-          <dl className="fields">
-            <div><dt>Sender</dt><dd><span dir="auto">{isUnknown(doc) ? 'Not detected' : doc.sender}</span><em>{isUnknown(doc) ? '' : 'Detected'}</em></dd></div>
-            <div><dt>Date</dt><dd className="num">{doc.date ? <>{doc.date}<em>{doc.kind === 'handwritten' ? 'Low certainty' : 'Detected'}</em></> : <span className="muted">No date found</span>}</dd></div>
-            <div><dt>Amount</dt><dd className="num">{doc.amount ? <>{doc.amount}<em>Detected</em></> : <span className="muted">No amount found</span>}</dd></div>
-            <div><dt>Pages</dt><dd>{doc.pages}</dd></div>
-            <div><dt>Captured</dt><dd>Today, {doc.capturedAt} · stored on this device</dd></div>
-          </dl>
+          {editing ? (
+            <form className="edit-form" onSubmit={(e: any) => { e.preventDefault(); saveEdit(); }}>
+              <label className="field" htmlFor="ed-title"><span>Title</span><input id="ed-title" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} dir="auto" /></label>
+              <label className="field" htmlFor="ed-sender"><span>Sender</span><input id="ed-sender" value={form.sender} onChange={(e: any) => setForm({ ...form, sender: e.target.value })} dir="auto" placeholder="e.g. חברת החשמל" /></label>
+              <label className="field" htmlFor="ed-date"><span>Date</span><input id="ed-date" type="date" value={form.date} onChange={(e: any) => setForm({ ...form, date: e.target.value })} /></label>
+              <label className="field" htmlFor="ed-amount"><span>Amount</span><input id="ed-amount" value={form.amount} onChange={(e: any) => setForm({ ...form, amount: e.target.value })} inputMode="decimal" placeholder="₪0.00" dir="ltr" /></label>
+              <div className="cta-row end">
+                <button className="btn btn-quiet" type="button" onClick={() => setEditing(false)}>Cancel</button>
+                <button className="btn btn-primary" type="submit">Save</button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <dl className="fields">
+                <div><dt>Sender</dt><dd><span dir="auto">{isUnknown(doc) ? 'Not detected' : doc.sender}</span><em>{tag('sender', !isUnknown(doc))}</em></dd></div>
+                <div><dt>Date</dt><dd className="num">{doc.date ? <>{doc.date}<em>{doc.kind === 'handwritten' && !wasEdited('date') ? 'Low certainty' : tag('date', true)}</em></> : (
+                  <><span className="muted">No date found</span>{onEdit && <button type="button" className="link-btn" onClick={lookAgain}>Look again</button>}</>
+                )}</dd></div>
+                <div><dt>Amount</dt><dd className="num">{doc.amount ? <>{doc.amount}<em>{tag('amount', true)}</em></> : <span className="muted">No amount found</span>}</dd></div>
+                <div><dt>Pages</dt><dd>{doc.pages}</dd></div>
+                <div><dt>Captured</dt><dd>Today, {doc.capturedAt} · stored on this device</dd></div>
+              </dl>
+              {onEdit && <button className="btn btn-quiet btn-sm edit-btn" type="button" onClick={startEdit}><Icon name="pencil" size={15} /> Edit details</button>}
+            </>
+          )}
 
           <h2 className="h-sub">Why we classified this</h2>
           <ul className="reasons">
@@ -1483,7 +1537,7 @@ function ArchiveScreen({ docs, setDocs, tab, setTab, openPrivacy, onNewSession, 
     return (
       <div className="page">
         <AppHeader onHome={() => setOpenId(null)} openPrivacy={openPrivacy} />
-        <DocumentDetail doc={open} docs={docs} onPages={pageOps} onDelete={deleteDoc} onBack={() => setOpenId(null)} goReview={() => { setOpenId(null); setTab('review'); }}
+        <DocumentDetail doc={open} docs={docs} onPages={pageOps} onEdit={(id: string, patch: any, msg?: string) => { if (Object.keys(patch).length) update(id, patch); toast(msg || 'Saved'); }} onDelete={deleteDoc} onBack={() => setOpenId(null)} goReview={() => { setOpenId(null); setTab('review'); }}
           onChangeCategory={(id: string, c: Category) => { update(id, { category: c }); toast(`Category changed to ${c}`); }} />
       </div>
     );

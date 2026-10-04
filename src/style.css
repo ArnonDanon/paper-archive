@@ -532,3 +532,7 @@ mark{background:color-mix(in srgb, var(--warn) 28%, transparent); color:inherit;
 .scan-more{justify-self:start; order:3; margin-top:6px}
 .btn-cam.is-on{background:#F6D86B; color:#2a2205; border-color:#F6D86B}
 .target-note{color:var(--cam-ink)}
+
+.edit-form{display:grid; gap:12px; margin-top:20px; padding:16px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface)}
+.edit-btn{margin-top:10px}
+.link-btn{background:none; border:0; padding:0; color:var(--accent); font-size:13.5px; text-decoration:underline; text-underline-offset:3px}

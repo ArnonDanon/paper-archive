@@ -518,16 +518,51 @@ const CATEGORY_HINTS: { re: RegExp; cat: Category; why: string }[] = [
 ];
 const TYPE_WORDS = ['חשבונית מס קבלה', 'חשבונית מס/קבלה', 'דף חשבון', 'חשבונית מס', 'חשבונית', 'הודעת תשלום', 'דרישת תשלום', 'קבלה', 'פוליסה', 'חשבון', 'הודעה', 'אישור', 'מכתב', 'Invoice', 'Receipt', 'Statement'];
 
+/* ---------- Finding the document date ----------
+ * Folds, creases and small print make the reader split or misread dates:
+ * "0 1/09/2 2", "01.O9.22", "18,11.2025", "2025-11-18" or "18 בנובמבר 2025".
+ * We repair common misreadings, accept all these shapes, and prefer the date
+ * printed next to a label such as "תאריך" or "Date". */
+const HE_MONTHS: Record<string, number> = { 'ינואר': 1, 'פברואר': 2, 'מרץ': 3, 'מרס': 3, 'אפריל': 4, 'מאי': 5, 'יוני': 6, 'יולי': 7, 'אוגוסט': 8, 'ספטמבר': 9, 'אוקטובר': 10, 'נובמבר': 11, 'דצמבר': 12 };
+const EN_MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const DATE_LABEL = /תאריך|ת\.\s?הפקה|הופק|date|issued/i;
+function fixDigits(line: string): string {
+  // Letters the reader often confuses with digits, only when they sit among digits
+  return line
+    .replace(/(?<=[\d.\/\-])[oOםס](?=[\d.\/\-])/g, '0')
+    .replace(/(?<=[\d.\/\-])[lI|!ו](?=[\d.\/\-])/g, '1')
+    .replace(/(?<=\d)[sS](?=\d)/g, '5')
+    .replace(/(?<=\d)B(?=\d)/g, '8')
+    // a crease can split a number: "0 1/09/2 2" -> "01/09/22"
+    .replace(/(?<![\d])(\d)\s(\d)(?=\s?[.\/\-,])/g, '$1$2')
+    .replace(/([.\/\-,])\s?(\d)\s(\d)(?![\d])/g, '$1$2$3');
+}
 function findDate(s: string): string {
-  const re = /(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4}|\d{2})(?!\d)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) {
-    const di = +m[1], mi = +m[2]; let y = m[3];
-    if (di < 1 || di > 31 || mi < 1 || mi > 12) continue;
-    if (y.length === 2) y = '20' + y;
-    return `${String(di).padStart(2, '0')}.${String(mi).padStart(2, '0')}.${y}`;
-  }
-  return '';
+  const year = new Date().getFullYear();
+  const cands: { v: string; score: number; at: number }[] = [];
+  const push = (d: number, m: number, y: number, score: number, at: number) => {
+    if (y < 100) y += 2000;
+    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1990 || y > year + 1) return;
+    cands.push({ v: `${String(d).padStart(2, '0')}.${String(m).padStart(2, '0')}.${y}`, score, at });
+  };
+  s.split('\n').forEach((raw, li) => {
+    const line = fixDigits(raw);
+    const near = DATE_LABEL.test(line) ? 3 : 0;
+    let m: RegExpExecArray | null;
+    const dmy = /(?<!\d)(\d{1,2})\s?[.\/\-,:]\s?(\d{1,2})\s?[.\/\-,:]\s?(\d{4}|\d{2})(?!\d)/g;
+    while ((m = dmy.exec(line))) push(+m[1], +m[2], +m[3], near + (m[3].length === 4 ? 1 : 0), li);
+    const ymd = /(?<!\d)(\d{4})\s?[.\/\-]\s?(\d{1,2})\s?[.\/\-]\s?(\d{1,2})(?!\d)/g;
+    while ((m = ymd.exec(line))) push(+m[3], +m[2], +m[1], near + 1, li);
+    const heb = /(?<!\d)(\d{1,2})\s?(?:ב|ל)?(ינואר|פברואר|מרץ|מרס|אפריל|מאי|יוני|יולי|אוגוסט|ספטמבר|אוקטובר|נובמבר|דצמבר)\s?,?\s?(\d{4})/g;
+    while ((m = heb.exec(line))) push(+m[1], HE_MONTHS[m[2]], +m[3], near + 2, li);
+    const eng = /(?<!\d)(\d{1,2})\s?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s?(\d{4})/gi;
+    while ((m = eng.exec(line))) push(+m[1], EN_MONTHS[m[2].toLowerCase()], +m[3], near + 2, li);
+    // A date on the line after a label ("תאריך:" on its own line)
+    if (!near && li > 0 && DATE_LABEL.test(s.split('\n')[li - 1]) && cands.length && cands[cands.length - 1].at === li) cands[cands.length - 1].score += 2;
+  });
+  if (!cands.length) return '';
+  cands.sort((a, b) => b.score - a.score || a.at - b.at);
+  return cands[0].v;
 }
 function findAmount(lines: string[]): { amount: string; label: string } | null {
   const num = /(\d{1,3}(?:,\d{3})+|\d+)\.(\d{2})(?!\d)/;
@@ -1141,5 +1176,6 @@ function RealProcessingScreen({ pages, onView, openPrivacy, existing = [] }: any
     </div>
   );
 }
+
 
 
